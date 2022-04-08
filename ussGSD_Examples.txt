@@ -1,0 +1,217 @@
+
+ 
+    
+  
+    ######setwd("D:/Supplementary")
+    #################################################################################
+    ################################ TEMPLATE-1.#####################################
+    #################################################################################
+    rm(list=ls())
+    ### Load the R program ussGSD.
+    ###---------------------------------------
+    source("ussGSD.txt")
+   
+
+    ### Read the grain-size dataset used for unmixing.
+    ###------------------------------------------------
+    DAT <- read.table("GrainSizeData.txt")
+
+    
+    ### Automatic unmixing of a single-sample grain-size 
+    ### distribution using Lognormal distributions.
+    ###--------------------------------------------------
+    USS <- ussGSD(gsl=DAT[1,], gsd=DAT[2,], auto=TRUE, 
+                  model="lognormal", viewFit=TRUE)
+
+
+    ### Access elements in the R objective "USS".
+    ###------------------------------------------
+    class(USS)
+
+    names(USS)
+
+    USS$gs.pars
+
+    USS$resolution
+
+    USS$gs.comp
+
+
+    ### Generate a new plot using the R objective "USS".
+    ###-------------------------------------------------
+    plot_ussGSD(USS, sampleNO=1, addvl=FALSE, 
+                logxy="xy", pch=25)
+
+    
+    ### Unmixing of a single-sample grain-size
+    ### distribution with an interactive pattern.
+    ###--------------------------------------------------
+    USS <- ussGSD(gsl=DAT[1,], gsd=DAT[3,], ncomp=4, 
+                  model="lognormal", auto=FALSE)
+    
+    USS$deltaH
+
+
+    USS1 <- ussGSD(gsl=DAT[1,], gsd=DAT[6,], ncomp=4, 
+                   model="weibull", auto=FALSE)
+
+    USS1$resolution
+    
+    #################################################################################
+
+
+
+
+
+
+
+    #################################################################################
+    ################################ TEMPLATE-2.#####################################
+    #################################################################################
+    rm(list=ls())
+    source("ussGSD.txt")
+
+    ### Read the grain-size dataset used for unmixing.
+    ###------------------------------------------------
+    DAT <- read.table("GrainSizeData.txt")
+
+
+    ### Parallel unmixing of a number of single-sample  
+    ### grain-size distributions in a batch pattern.
+    ###------------------------------------------------------------------
+    ### Use function ussGSDbatch() instead if 
+    ### parallel calculation cannot be supported.  
+    USSbatch <- ussGSDbatchp(DAT, model=NULL, trim=TRUE, mrsl=0.71,
+                             pdfname="ussGSDbatch0",rdname="ussGSDbatch0") 
+
+
+
+    ### Access the unmixing results of the sixth sample.
+    ###-------------------------------------------------
+    USSbatch$NO6
+
+
+
+    ### Access the shape parameters of the sixth sample.
+    ###-------------------------------------------------
+    USSbatch$NO6$sp
+
+
+
+    ### Visualise the unmixing results of the 20th sample.
+    ###-----------------------------------------------------
+    plot_ussGSD(USSbatch$NO20)
+
+
+
+    ### Find the number of grain-size distributions that
+    ### have FOM values larger than 4. 
+    ###---------------------------------------------------------------------
+    largeFOMidx <- sapply(USSbatch, function(x) !is.null(x) && x$FOM>4)
+    seq(length(USSbatch))[largeFOMidx]
+
+
+  
+    ### Load the above unmixed results (USSbatch).
+    ###-----------------------------------------------------
+    load_ussGSDbatch(rdname="ussGSDbatch0")
+
+
+
+    ### Update the unmixing results.
+    ###-------------------------------------------------  
+    update_ussGSDbatch(sampleNO=c(12,18,29,30,31,72), ncomp=3, 
+                       model="weibull", ctf=1) 
+
+
+    update_ussGSDbatch(sampleNO=c(28,57,83,89,94), ncomp=4, 
+                       model="weibull", ctf=1) 
+
+
+    update_ussGSDbatch(sampleNO=65, ncomp=4, auto=FALSE, 
+                       model="weibull", ctf=1) 
+
+
+    update_ussGSDbatch(sampleNO=c(82,86), ncomp=4,  
+                       auto=FALSE, model="lognormal", ctf=1) 
+
+    
+
+    ### Visualise the updated unmixing results.
+    ###-------------------------------------------------
+    plot_ussGSDbatch()
+
+
+ 
+    ### Summary the final unmixing results.
+    ###-------------------------------------------
+    summary_ussGSDbatch(nkm=7, nhc=7, nr=11, nc=10, comb=5, csv=TRUE)
+
+    #################################################################################
+
+
+
+
+    
+     
+    #################################################################################
+    ################################ TEMPLATE-3.#####################################
+    #################################################################################
+    rm(list=ls())
+    source("ussGSD.txt")
+
+    ### Load the existing RData file ("ussGSDbatch0.RData") into the  
+    ### R calculation environment for further analysis.
+    ###
+    ### Please download the RData file and put it 
+    ### into the current working directory before loading it.
+    ###---------------------------------------------------------------------------
+    load_ussGSDbatch(rdname="ussGSDbatch0")
+
+
+
+    ### Visualize the unmixing results.
+    ###-------------------------------------------------
+    plot_ussGSDbatch()
+
+
+
+    ### Summarize the unmixing results.
+    ###-------------------------------------------
+    summary_ussGSDbatch(nkm=7, nhc=7, nr=11, nc=10, comb=5)
+
+
+
+    ### Re-analyze certain grain-size distributions that have
+    ### larger RSS values using the Lognormal distribution. 
+    ###--------------------------------------------------------------------
+    GSDbatch <- get("GSDbatch", envir=gsdbatch)
+
+    largeRSSidx <- sapply(GSDbatch, function(x) !is.null(x) && x$RSS>0.7)
+
+    NO <- seq(length(GSDbatch))[largeRSSidx]
+
+    update_ussGSDbatch(sampleNO=NO, model="lognormal") 
+
+
+
+    ### Re-analyze the grain-size distribution of the 44th sample.
+    ###------------------------------------------------------------
+    update_ussGSDbatch(sampleNO=44, auto=TRUE, 
+                       ncomp=4, model="lognormal")
+
+ 
+
+    ### Re-visualize the unmixing results.
+    ###-------------------------------------------------
+    plot_ussGSDbatch()
+
+
+
+    ### Re-summarize the unmixing results.
+    ###-------------------------------------------
+    summary_ussGSDbatch(nkm=7, nhc=7, nr=11, nc=10, comb=5)
+
+    #################################################################################
+    ###
+    
