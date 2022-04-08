@@ -1,0 +1,3915 @@
+
+  ###
+  ###**************************************************************************************************************************
+  ### R program ussGSD (v1.0).
+  ###**************************************************************************************************************************
+  ### Methods and open source R code for efficient and flexible unmixing of single-sample grain-size distributions.
+  ### Author: Jun Peng, Hunan University of Science and Technology, China. 
+  ### Last updated, 2022.03.31.
+  ### 
+  ### Please contact Jun Peng (pengjun10@mails.ucas.ac.cn) 
+  ### if you have any problem during the application of the program or 
+  ### if you want to report any bug encountered during the use of the program.
+  ###**************************************************************************************************************************
+  
+
+  ###
+  ###*******************************************************
+  ### Load the required external R packages.
+  ### Please make sure that the following packages have  
+  ### been installed in your R calculation environment.
+  ###=======================================================
+  library(pracma)
+  ###
+  library(tgcd)
+  ###
+  library(numOSL)
+  ###
+  library(minpack.lm)
+  ###=======================================================
+
+
+  ###
+  ###**************************************************************************************************************************
+  ### Function summary_ussGSDbatch() is used for generated a pdf file containing the 
+  ### a summary of unmixing results of grain-size distributions obtained from a batch model. 
+  ###==========================================================================================================================
+  ### The function contains the following arguments.
+  ###
+  ### obj_batchgsd: an S3 object of class "gsdbatch" generated using the function
+  ###               ussGSDbatch(), ussGSDbatchp(), update_ussGSDbatch(), or update_ussGSDbatchp().
+  ### 
+  ###          gst: A character indicating the grain-size type ("mode", "median", or "mean") 
+  ###               to be analyzed during the application of the hierarchical clustering algorithm 
+  ###               in analyzing the unmixed grain-size distributions (components).
+  ###
+  ###        ctype: An integer indicating the type of the data used for hierarchical cluster analysis, 
+  ###               either (1) the unmixing results or (2) the original GSDs.
+  ###
+  ###          nkm: An integer indicating the number of clusters to be generated (from 2 to 13)
+  ###               during the application of the k-means clustering algorithm in analyzing 
+  ###               the unmixed grain-size mode and median.
+  ###
+  ###          nfm: An integer indicating the number of clusters to be generated (from 2 to 13)
+  ###               during the application of the Bayesian clustering algorithm in analysing
+  ###               the unmixed grain-size mean.
+  ###
+  ###          nhc: An integer indicating the number of clusters to be generated (from 2 to 13)  
+  ###               during the application of the hierarchical clustering algorithm in analyzing
+  ###               the unmixed grain-size distributions (components). 
+  ###
+  ###      normthd: A character indicating the method used for data normalization, 
+  ###               one of "minmax", "meansd", or "sd".
+  ###
+  ###         mdmc: A character indicating the method used for distance matrix calculation in the function
+  ###               dist(), one of "euclidean", "maximum", "manhattan", "canberra", "binary" or "minkowski".
+  ###
+  ###          agm: A character indicating the agglomeration method to be used in the function hclust(), 
+  ###               one of "ward.D", "ward.D2", "single", "complete", "average", "mcquitty", "median", 
+  ###               or "centroid". 
+  ###
+  ###         comb: An integer (from 1 to 10) indicating the type of the combination used for generating 
+  ###               the data used for hierarchical clustering (used only if ctype=1).
+  ###
+  ###           nr: An integer indicating the number of rows generated in the PDF file for the unmixing results.
+  ###
+  ###           nc: An integer indicating the number of columns generated in the PDF file for the unmixing results.
+  ###
+  ###         logx: A logical value indicating whether the grain-size levels will be ploted in a logged scale.
+  ###
+  ###          csv: A logical value indicating if the output results will be saved in CSV files. 
+  ###==========================================================================================================================
+  ### The function 
+  ### Generates a PDF file with postfix of "_summary" in the current working directory, and returns  
+  ### an invisible list containing the following elements (these elements will be saved to CSV files with  
+  ### postfix of "_gsfit","_pgsp",and "_gspattern" if csv=TRUE):
+  ###
+  ### gsfit    : A data.frame summarizing the fitting results of individual GSDs, 
+  ###            with column names of
+  ###            NO-sample number, Model-fitting model, ncomp-number of components, FOM-figure of merit,
+  ###            RSS-residual sum of squares, R2-R2 statistic, RSE-residual standard error.
+  ###
+  ###  pgsp    : A matrix showing the pooled grain-size parameters and associated clustering results, 
+  ###            with column names of
+  ###            NO-sample number, Median-component median, MedianKM-KM cluster the median belongs to,
+  ###            Mode-component mode, ModeKM-KM cluster the mode belongs to, Mean-component mean,
+  ###            Sd-component standard deviation, MeanFMM-FMM cluster the mean belongs to, 
+  ###            Abundance-component abundance.           
+  ###
+  ### gspattern: A matrix showing the datasets and patterns of grain-size distributions, 
+  ###            with column names of
+  ###            NO-sample number, ncomp-number of components, weightGZ-weighted grain size, 
+  ###            dominance-degree of dominance, GZminABD1-GZ at min abundance, minABD1-min abundance,
+  ###            GZmaxABD1-GZ at max abundance, maxABD1-max abundance, minGZ1-min GZ, maxGZ1-max GZ,
+  ###            ABDminGZ1-abundance at min GZ, ABDmaxGZ1-abundance at max GZ, 
+  ###            rsdGZ-relative standard deviation of GZ, rsdABD-relative standard deviation of abundance,
+  ###            GZminABD2-GZ at second min abundance, minABD2-second min abundance,  
+  ###            GZmaxABD2-GZ at second max abundance, maxABD2-second max abundance, 
+  ###            minGZ2-second min GZ, ABDminGZ2-abundance at second min GZ, 
+  ###            maxGZ2-second max GZ, ABDmaxGZ2-abundance at second max GZ. 
+  ###            (GZ denotes the median, mode, or mean of individual grain size component, depends on argument [gst]).                       
+  ###
+  ### Note that if obj_batchgsd=NULL, the user needs to ensure that the function load_ussGSDbatch() 
+  ### has been called and an object R "GSDbatch" has been loaded from the file "ussGSDbatch.RData" 
+  ### containing in the current working directory.
+  ###==========================================================================================================================
+  summary_ussGSDbatch <- function(obj_batchgsd=NULL, gst="mode", ctype=1, nkm=NULL, nfm=NULL, 
+                                  nhc=6, normthd="minmax", mdmc="euclidean", agm="complete", comb=5,
+                                  nr=10, nc=10, logx=TRUE, csv=FALSE) {
+
+      stopifnot(is.character(gst), length(gst)==1, gst %in% c("mode", "median", "mean"),
+                is.numeric(ctype), length(ctype)==1, ctype %in% c(1,2),
+                is.null(nkm) || (is.numeric(nkm) && length(nkm)==1 && nkm %in% (2:13)),
+                is.null(nfm) || (is.numeric(nfm) && length(nfm)==1 && nhc %in% (2:13)),
+                is.null(nhc) || (is.numeric(nhc) && length(nhc)==1 && nhc %in% (2:13)),
+                is.character(normthd), length(normthd)==1, normthd %in% c("minmax","meansd","sd"),
+                is.character(mdmc), length(mdmc)==1,
+                is.character(agm), length(agm)==1,
+                is.numeric(comb), length(comb)==1, comb %in% (1:10),
+                is.numeric(nr), length(nr)==1,
+                is.numeric(nc), length(nc)==1)
+
+      ###
+      if (!is.null(obj_batchgsd)) {
+
+          if(class(obj_batchgsd)!="batchgsd") 
+              stop("Error: [obj_batchgsd] should be an S3 object of class 'batchgsd'!")
+
+          ###
+          GSDbatch <- obj_batchgsd
+
+      } else {
+
+          if (!exists("gsdbatch")) 
+              stop("Error: function [load_ussGSDbatch] has not been called!")
+
+          ###
+          GSDbatch <- get("GSDbatch", envir=gsdbatch)
+
+          ###
+          xoxoxo <- get("xoxoxo", envir=gsdbatch)
+
+      } # end if.
+
+      ###
+      N <- length(GSDbatch)
+
+      ###
+      ookk <- sapply(GSDbatch, function(x) (!is.null(x)) && (!is.null(x$FOM)))
+      if (length(ookk)==0) 
+          stop("Error: no data can be used to generate the summary file!")
+
+      ###
+      GSDbatchx <- GSDbatch[ookk]
+      Nx <- length(GSDbatchx)
+
+      ### 
+      FOM <- sapply(GSDbatchx, function(x) x$FOM)
+      RSS <- sapply(GSDbatchx, function(x) x$RSS)
+      R2 <- sapply(GSDbatchx, function(x) x$R2)
+      RSE <- sapply(GSDbatchx, function(x) x$RSE)
+
+      ###
+      compvec <- sapply(GSDbatchx, function(x) nrow(x$gs.pars))
+
+      ###
+      abundance <- c(sapply(GSDbatchx, function(x) x$gs.pars[,1]), recursive=TRUE)
+
+      ###
+      meanGZ <- c(sapply(GSDbatchx, function(x) x$gs.pars[,2]), recursive=TRUE)
+
+      ###
+      medianGZ <- c(sapply(GSDbatchx, function(x) x$gs.pars[,3]), recursive=TRUE)
+
+      ###
+      modeGZ <- c(sapply(GSDbatchx, function(x) x$gs.pars[,4]), recursive=TRUE)
+
+      ###
+      sdGZ <- c(sapply(GSDbatchx, function(x) x$gs.pars[,5]), recursive=TRUE)
+
+      ###
+      if (is.null(nfm)) nfm <- 0
+
+      ###
+      FMM <- numOSL::RadialPlotter(cbind(meanGZ,sdGZ),ncomp=nfm, 
+                                   maxcomp=13, plot=FALSE)
+
+      ###
+      nfm <- nrow(FMM$pars)
+
+      ###
+      if (is.null(nkm)) nkm <- nfm
+      if (is.null(nhc)) nhc <- nfm
+
+      ###  
+      if (gst=="mode") { 
+
+          idx <- 4
+
+          ###
+          xupper <- if (logx==TRUE) { 2.25*max(modeGZ) } else { max(GZ) }
+
+      } else if (gst=="median") {
+
+          idx <- 3
+
+          ###
+          xupper <- if (logx==TRUE) { 2.25*max(medianGZ) } else { max(GZ) }
+
+      } else {
+
+          idx <- 2
+
+          ###
+          xupper <- if (logx==TRUE) { 2.25*max(meanGZ) } else { max(GZ) }
+
+      } # end if. 
+
+      ###
+      yupper1 <- 1.25*max(abundance)
+      yupper2 <- 1.05*max(sapply(GSDbatchx, function(x) max(x$gs.comp[,2])))
+
+      ###
+      if (logx==TRUE) {
+
+          myTK <- c(0.1,0.2,0.5,1,2,5,10,20,50,100,200,500,1000,2000)
+          myLB <- c("0.1","0.2","0.5","1","2","5","10","20","50",
+                    "100","200","500","1000","2000")
+
+          ###
+          myTK1 <- c(0.2,0.5,1,2,5,10,20,50,100,200,500,1000,2000)
+
+      } else {
+
+          myTK <- seq(from=0, to=2000, by=400)
+          myLB <- as.character(myTK)
+
+          ###
+          myTK1 <- myTK
+
+      } # end if. 
+     
+      ###
+      myTK2 <- seq(from=0, to=100, by=20)   
+
+      ###
+      if (!is.null(obj_batchgsd)) {
+
+          pdf(file="ussGSDbatch_summary.pdf", width=7, height=7)
+
+      } else {
+
+          pdf(file=paste(xoxoxo,"_summary.pdf",sep=""), width=7, height=7)
+      
+      } # end if.
+
+      ###
+      oldpar <- par("mar", "mfrow", "bg")
+      on.exit(par(oldpar))
+
+      ###
+      ### THE FIRST PART. 
+      ###================================================================================================
+      ###************************************************************************************************
+      par(mfrow=c(1,1))
+      par(mar=c(2.1, 2.1, 4.1, 2.1))
+      plot(1,1,type="n", xaxt="n", yaxt="n", bty="n", xlab="", ylab="", 
+           main="Summary of unmixing results", cex.main=2)
+
+      ###
+      MDL <- sapply(GSDbatchx, function(x) x$model)
+      
+      ###
+      mylegend <- c(paste("Total number of single-sample GSDs:  ", N, sep=""), "",
+                    paste("Number of GSDs failed in unmixing:  ",N-Nx,sep=""),
+                    paste("Number of GSDs analysed with Weibull:  ", 
+                          sum(MDL=="weibull"), sep=""),
+                    paste("Number of GSDs analysed with Lognormal:  ", 
+                          sum(MDL=="lognormal"), sep=""), "",
+                    paste("Number of GSDs with FOM>5%:  ", sum(FOM>5), sep=""),
+                    paste("Number of GSDs with RSS>1:  ", sum(RSS>1), sep=""),
+                    paste("Number of GSDs with R2<0.995:  ", sum(R2<0.996), sep=""),       
+                    paste("Number of GSDs with RSE>0.1:  ", sum(RSE>0.1), sep=""), "",
+                    paste("Number of GSDs with ncomp=1 :  ", sum(compvec==1), sep=""),
+                    paste("Number of GSDs with ncomp=2 :  ", sum(compvec==2), sep=""),
+                    paste("Number of GSDs with ncomp=3 :  ", sum(compvec==3), sep=""),
+                    paste("Number of GSDs with ncomp=4 :  ", sum(compvec==4), sep=""),
+                    paste("Number of GSDs with ncomp=5 :  ", sum(compvec==5), sep=""),
+                    paste("Number of GSDs with ncomp=6 :  ", sum(compvec==6), sep=""),
+                    paste("Number of GSDs with ncomp=7 :  ", sum(compvec==7), sep=""),
+                    paste("Number of GSDs with ncomp=8 :  ", sum(compvec==8), sep=""),
+                    paste("Number of GSDs with ncomp=9 :  ", sum(compvec==9), sep=""),
+                    paste("Number of GSDs with ncomp=10:  ", sum(compvec==10), sep=""),
+                    paste("Number of GSDs with ncomp=11:  ", sum(compvec==11), sep=""),
+                    paste("Number of GSDs with ncomp=12:  ", sum(compvec==12), sep=""),
+                    paste("Number of GSDs with ncomp=13:  ", sum(compvec==13), sep=""))
+      legend("top",legend=mylegend[1:(max(compvec)+11)], bty="n", cex=1.25)
+
+      ### SECOND.
+      layout(matrix(seq(nr*nc),nrow=nr, ncol=nc, byrow=TRUE), respect=TRUE)
+      par(mar=c(0.3,0.3,0.3,0.3))
+
+      ###
+      labVec <- (seq(N))[ookk]
+
+      ###
+      for (i in 1:Nx) {
+    
+          plot(GSDbatchx[[i]]$gs.pars[,c(idx,1),drop=FALSE], type="h", lwd=5, 
+               log=ifelse(logx,"x",""), xaxt="n", yaxt="n", xlim=c(0.2,xupper), 
+               ylim=c(0,yupper1), col="black")
+
+          ###
+          lines(GSDbatchx[[i]]$gs.pars[,c(idx,1),drop=FALSE], lwd=3, col="black")
+          axis(side=1, at=myTK1, labels=FALSE, cex.axis=2)
+          axis(side=2, at=myTK2, labels=FALSE, cex.axis=2)
+
+          ###
+          box(lwd=3, col="grey30")
+          text(x=1, y=80, labels=labVec[i], cex=1.25)
+
+          ###
+          par("new"=TRUE)
+          plot(GSDbatchx[[i]]$gs.comp[,c(1,2),drop=FALSE], type="l", lwd=1, 
+               log=ifelse(logx,"x",""), xaxt="n", yaxt="n", bty="n", 
+               xlim=c(0.2,xupper), ylim=c(0,yupper2), col="grey30")
+
+      } # end for.
+
+      ###
+      layout(matrix(c(1,2,3,4),nrow=2, byrow=TRUE), respect=TRUE)
+      par(mar=c(4.1, 4.1, 2.1, 2.1))
+
+      ###
+      XY1 <- density(FOM)
+      plot(XY1, main="", xlab="Figure of merit (FOM) (%)", ylab="Kernel density", 
+           col="skyblue", lwd=3, mgp=c(2.3,1,0), cex.axis=1.25, cex.lab=1.25, 
+           xlim=range(XY1$x))
+       
+      ###
+      par("new"=TRUE)
+      plot(sort(FOM), seq(FOM), pch=21, col="black", cex=1.5,  
+           xlim=range(XY1$x), xaxt="n", yaxt="n", xlab="", ylab="")
+
+      ###
+      qtfom <- round(quantile(FOM, probs=c(0,0.25,0.5,0.75,1)),3)
+      legend("right", legend=c(paste("Min: ",qtfom[1],sep=""), 
+             paste("25%: ",qtfom[2],sep=""),paste("50%: ",qtfom[3],sep=""),
+             paste("75%: ",qtfom[4],sep=""),paste("Max: ",qtfom[5],sep="")), 
+             text.col="skyblue", bty="n")
+
+      ###
+      XY2 <- density(RSS)
+      plot(XY2, main="", xlab="Residual sum of squares (RSS)", ylab="Kernel density", 
+           col="red", lwd=3, mgp=c(2.3,1,0), cex.axis=1.25, cex.lab=1.25, xlim=range(XY2$x))
+
+      ###
+      par("new"=TRUE)
+      plot(sort(RSS), seq(RSS), pch=22, col="black", cex=1.5, xlim=range(XY2$x), 
+           xaxt="n", yaxt="n", xlab="", ylab="")
+
+      ###
+      qtrss <- round(quantile(RSS, probs=c(0,0.25,0.5,0.75,1)),3)
+      legend("right", legend=c(paste("Min: ",qtrss[1],sep=""), 
+             paste("25%: ",qtrss[2],sep=""),paste("50%: ",qtrss[3],sep=""),
+             paste("75%: ",qtrss[4],sep=""),paste("Max: ",qtrss[5],sep="")), 
+             text.col="red", bty="n")
+      
+      ###
+      XY3 <- density(R2)
+      plot(XY3, main="", xlab="R2 statistic (R2)", ylab="Kernel density", 
+           col="purple", lwd=3, mgp=c(2.3,1,0), cex.axis=1.25, cex.lab=1.25, 
+           xlim=range(XY3$x))
+
+      ###
+      par("new"=TRUE)
+      plot(sort(R2), seq(R2), pch=23, col="black", cex=1.5, xlim=range(XY3$x), 
+           xaxt="n", yaxt="n", xlab="", ylab="")
+
+      ###
+      qtr2 <- round(quantile(R2, probs=c(0,0.25,0.5,0.75,1)),3)
+      legend("left", legend=c(paste("Min: ",qtr2[1],sep=""), 
+             paste("25%: ",qtr2[2],sep=""),paste("50%: ",qtr2[3],sep=""),
+             paste("75%: ",qtr2[4],sep=""),paste("Max: ",qtr2[5],sep="")), 
+             text.col="purple", bty="n")
+
+      ###  
+      XY4 <- density(RSE)
+      plot(XY4, main="", xlab="Residual standard error (RSE)", ylab="Kernel density", 
+           col="grey60", lwd=3, mgp=c(2.3,1,0), cex.axis=1.25, cex.lab=1.25, 
+           xlim=range(XY4$x))
+      
+      ###
+      par("new"=TRUE)
+      plot(sort(RSE), seq(RSE), pch=24, col="black", cex=1.5,  
+           xlim=range(XY4$x), xaxt="n", yaxt="n", xlab="", ylab="")
+
+      ###
+      qtrse <- round(quantile(RSE, probs=c(0,0.25,0.5,0.75,1)),3)
+      legend("right", legend=c(paste("Min: ",qtrse[1],sep=""), 
+             paste("25%: ",qtrse[2],sep=""),paste("50%: ",qtrse[3],sep=""),
+             paste("75%: ",qtrse[4],sep=""),paste("Max: ",qtrse[5],sep="")), 
+             text.col="grey60", bty="n")
+
+      ###
+      ### THE SECOND and THIRD PARTS.
+      ###================================================================================================
+      ###************************************************************************************************
+      colvec <- c("skyblue", "red", "blue", "plum4", "green", "brown", 
+                  "yellow2", "deeppink", "black", "wheat", "grey60", 
+                  "turquoise", "magenta1")
+
+      ###
+      for (k in 1:2) {
+
+          if (k==1) kDDD <- medianGZ
+          if (k==2) kDDD <- modeGZ
+
+          ###
+          KM <- stats::kmeans(log(kDDD), centers=nkm, nstart=1000)
+
+          ###
+          kmCST <- round(sort(exp(KM$centers)),1)
+
+          ###
+          rangeXV <- matrix(nrow=13, ncol=2)
+          for (i in 1:nkm) {
+
+              rangeXV[i,] <- round(range(kDDD[KM$cluster==i]),1)
+
+          } # end for.
+
+          ###
+          odrgXV <- order(rangeXV[,1])
+          rangeXV <- rangeXV[odrgXV,,drop=FALSE]    
+
+          ###
+          ###-------------------------------------------------------------------------------------
+          par(mfrow=c(1,1))
+          par(mar=c(2.1, 2.1, 4.1, 2.1))
+          plot(1, 1, type="n", xaxt="n", yaxt="n", bty="n", xlab="", ylab="", 
+               main=paste("Pattern of unmixed grain-size ", ifelse(k==1, "median","mode"),sep=""), 
+               cex.main=2)
+
+          ###
+          mylegend <- c("Algorithm: K-Means clustering", "",
+                        paste("Centre of cluster 1 :  ", kmCST[1], 
+                              " (", rangeXV[1,1]," - ",rangeXV[1,2],")",sep=""),
+                        paste("Centre of cluster 2 :  ", kmCST[2], 
+                              " (", rangeXV[2,1]," - ",rangeXV[2,2],")",sep=""),
+                        paste("Centre of cluster 3 :  ", kmCST[3], 
+                              " (", rangeXV[3,1]," - ",rangeXV[3,2],")",sep=""),
+                        paste("Centre of cluster 4 :  ", kmCST[4], 
+                              " (", rangeXV[4,1]," - ",rangeXV[4,2],")",sep=""),
+                        paste("Centre of cluster 5 :  ", kmCST[5], 
+                              " (", rangeXV[5,1]," - ",rangeXV[5,2],")",sep=""),
+                        paste("Centre of cluster 6 :  ", kmCST[6], 
+                              " (", rangeXV[6,1]," - ",rangeXV[6,2],")",sep=""),
+                        paste("Centre of cluster 7 :  ", kmCST[7], 
+                              " (", rangeXV[7,1]," - ",rangeXV[7,2],")",sep=""),
+                        paste("Centre of cluster 8 :  ", kmCST[8], 
+                              " (", rangeXV[8,1]," - ",rangeXV[8,2],")",sep=""),
+                        paste("Centre of cluster 9 :  ", kmCST[9], 
+                              " (", rangeXV[9,1]," - ",rangeXV[9,2],")",sep=""),
+                        paste("Centre of cluster 10:  ", kmCST[10], 
+                              " (", rangeXV[10,1]," - ",rangeXV[10,2],")",sep=""),
+                        paste("Centre of cluster 11:  ", kmCST[11], 
+                          "  (", rangeXV[11,1]," - ",rangeXV[11,2],")",sep=""),
+                        paste("Centre of cluster 12:  ", kmCST[12], 
+                              " (", rangeXV[12,1]," - ",rangeXV[12,2],")",sep=""),
+                        paste("Centre of cluster 13:  ", kmCST[13], 
+                              " (", rangeXV[13,1]," - ",rangeXV[13,2],")",sep=""))
+          legend("top",legend=mylegend[1:(nkm+2)], bty="n", cex=1.25)
+      
+          ###
+          ###-------------------------------------------------------------------------------
+          par(mfrow=c(1,1))
+          par(mar=c(4.1, 4.1, 2.1, 2.1))
+
+          ###
+          plot(x=kDDD, y=abundance, xaxt="n", yaxt="n", log=ifelse(logx,"x",""), type="n", lwd=3, 
+               xlab=paste("The ",ifelse(k==1,"median","mode"), " of grain-size components (um)",  
+               sep=""), ylab="Abundance (%)", mgp=c(2.3,1,0), cex.lab=1.5, cex.axis=1.5, cex=2)
+          grid(lwd=2, col="grey90", lty=1)
+          box(lwd=2)
+
+          ###
+          axis(side=1, at=myTK, labels=myLB, cex.axis=1.5, lwd=1.8)
+          axis(side=2, at=myTK2, labels=myTK2, cex.axis=1.5, lwd=1.8)
+
+          ###
+          for (i in 1:nkm) {
+
+              XV <- kDDD[KM$cluster==i]
+              YV <- abundance[KM$cluster==i]
+
+              ###
+              xxv <- range(XV)
+              yyv <- range(YV)
+    
+              ###
+              polygon(x=c(xxv[1],xxv[1],xxv[2],xxv[2]), 
+                      y=c(yyv[1],yyv[2],yyv[2],yyv[1]), 
+                      border="grey95", col="grey95")
+
+              ###
+              points(x=XV, y=YV, col=colvec[i], bg=colvec[i], pch=21, cex=1)
+
+          } # end for.
+
+          ###
+          legend(ifelse(logx,"topleft","topright"), legend=paste("Cluster ",1:nkm,sep=""), 
+                 pch=21, col=colvec[1:nkm][odrgXV], pt.bg=colvec[1:nkm][odrgXV], bty="n")
+
+          ###
+          if (k==1) medianKM <- KM$cluster
+          if (k==2) modeKM <- KM$cluster
+
+      } # end for.
+
+      ###
+      ### THE FOURTH PART.
+      ###================================================================================================
+      ###************************************************************************************************
+      fmmMAT <- matrix(nrow=length(meanGZ), ncol=nfm)
+
+      ###
+      yv_fmm <- log(meanGZ)
+      seyv_fmm <- sdGZ/meanGZ
+
+      ###
+      for (i in 1:nfm) {
+
+          p_fmm <- FMM$pars[i,1]
+          mu_fmm <- log(FMM$pars[i,3])
+
+          fmmMAT[,i] <- p_fmm/sqrt(2*pi)/seyv_fmm*
+              exp(-0.5*(yv_fmm-mu_fmm)^2/seyv_fmm^2)
+
+      } # end for.
+
+      ###
+      cluster_fmm <- apply(fmmMAT, MARGIN=1, which.max)
+
+      ###
+      kmCST <- round(FMM$pars[,3],1)
+
+      ###
+      rangeXV <- matrix(nrow=13, ncol=2)
+
+      ###
+      for (i in 1:nfm) {
+
+          rangeXV[i,] <- round(range(meanGZ[cluster_fmm==i]),1)
+
+      } # end for.
+
+      ###
+      odrgXV <- order(rangeXV[,1])
+      rangeXV <- rangeXV[odrgXV,,drop=FALSE]    
+
+      ###
+      ###---------------------------------------------------------------------------------
+      par(mfrow=c(1,1))
+      par(mar=c(2.1, 2.1, 4.1, 2.1))
+      plot(1, 1, type="n", xaxt="n", yaxt="n", bty="n", xlab="", ylab="", 
+           main="Pattern of unmixed grain-size mean", cex.main=2)
+
+      ###
+      mylegend <- c("Algorithm: Bayesian clustering (Finite mixture model)", "",
+                    paste("The maximum logged likelihood value: ", round(FMM$maxlik,1),sep=""),
+                    paste("The Bayesian Information Criteria value: ", round(FMM$bic,1),sep=""),"",
+                    paste("Centre of cluster 1 :  ", kmCST[1], 
+                          " (", rangeXV[1,1]," - ",rangeXV[1,2],")",sep=""),
+                    paste("Centre of cluster 2 :  ", kmCST[2], 
+                          " (", rangeXV[2,1]," - ",rangeXV[2,2],")",sep=""),
+                    paste("Centre of cluster 3 :  ", kmCST[3], 
+                          " (", rangeXV[3,1]," - ",rangeXV[3,2],")",sep=""),
+                    paste("Centre of cluster 4 :  ", kmCST[4], 
+                          " (", rangeXV[4,1]," - ",rangeXV[4,2],")",sep=""),
+                    paste("Centre of cluster 5 :  ", kmCST[5], 
+                          " (", rangeXV[5,1]," - ",rangeXV[5,2],")",sep=""),
+                    paste("Centre of cluster 6 :  ", kmCST[6], 
+                          " (", rangeXV[6,1]," - ",rangeXV[6,2],")",sep=""),
+                    paste("Centre of cluster 7 :  ", kmCST[7], 
+                          " (", rangeXV[7,1]," - ",rangeXV[7,2],")",sep=""),
+                    paste("Centre of cluster 8 :  ", kmCST[8], 
+                          " (", rangeXV[8,1]," - ",rangeXV[8,2],")",sep=""),
+                    paste("Centre of cluster 9 :  ", kmCST[9], 
+                          " (", rangeXV[9,1]," - ",rangeXV[9,2],")",sep=""),
+                    paste("Centre of cluster 10:  ", kmCST[10], 
+                          " (", rangeXV[10,1]," - ",rangeXV[10,2],")",sep=""),
+                    paste("Centre of cluster 11:  ", kmCST[11], 
+                      "  (", rangeXV[11,1]," - ",rangeXV[11,2],")",sep=""),
+                    paste("Centre of cluster 12:  ", kmCST[12], 
+                          " (", rangeXV[12,1]," - ",rangeXV[12,2],")",sep=""),
+                    paste("Centre of cluster 13:  ", kmCST[13], 
+                          " (", rangeXV[13,1]," - ",rangeXV[13,2],")",sep=""))
+      legend("top",legend=mylegend[1:(nfm+5)], bty="n", cex=1.25)
+
+      ###
+      ###-------------------------------------------------------------------------------
+      x <- seyv_fmm
+      y <- yv_fmm
+      centralGZ <- sum(y/x^2)/sum(1/x^2)
+   
+      ###
+      xx <- 1/x
+      yy <- (y-centralGZ)/x
+
+      ###
+      minPrecision <- 0
+      maxPrecision <- max(xx)*1.3
+
+      ###
+      zmin <- min(meanGZ)*0.9 
+      zmax <- max(meanGZ)*1.1
+   
+      ###
+      miny <- (log(zmin)-centralGZ)*maxPrecision
+      maxy <- (log(zmax)-centralGZ)*maxPrecision
+
+      ###
+      par("mar"=c(4.1, 4.1, 2.1, 5.1))
+
+      ###
+      plot(xx, yy, xaxt="n", yaxt="n", bty="n", xlim=c(minPrecision, maxPrecision), 
+           xaxs="i", yaxs="i", ylim=c(miny, maxy), xlab="", ylab="", type="n")
+      box(lwd=2)
+
+      ###
+      locx <- axTicks(side=1)
+      locx <- seq(from=min(locx), to=max(locx), by=(max(locx)-min(locx))/5)
+      locy <- seq(from=miny, to=maxy, by=(maxy-miny)/5)
+
+      ###
+      axis(side=1, at=locx[-1], lwd=2, labels=round(100/locx[-1],1), 
+           line=0, tck=0.02, padj=-4, cex.axis=1.2)
+      mtext(text="Relative standard error", side=1, cex=1.2, line=-3)
+
+      ###
+      axis(side=1, at=locx, lwd=2.0, labels=locx, line=0, padj=0, cex.axis=1.2)
+      mtext(text="Precision", side=1, cex=1.2, line=2)
+
+      ###
+      axis(side=2, at=c(-2,0,2), lwd=2, labels=FALSE, cex.axis=1.2)
+      mtext(text="-2", side=2, at=-2, cex=0.8, line=1)
+      mtext(text="0",side=2, at=0, cex=0.8, line=1)
+      mtext(text="2", side=2, at=2, cex=0.8, line=1)
+      mtext(text="Standardised Estimate", side=2, at=0, cex=1.2, line=2)
+
+      ###
+      axis(side=4, at=locy, labels=round(exp(locy/maxPrecision+centralGZ),2),
+           lwd=2, cex.axis=1.2)
+      abline(v=maxPrecision, lwd=2)
+      mtext(text="The mean of grain-size components (um)", side=4, cex=1.2, line=3) 
+   
+      ###
+      for (i in seq(nfm)) {    
+  
+          y1 <- (log(FMM$pars[i,3])-centralGZ)*maxPrecision
+
+          ###
+          polygon(x=rep(c(minPrecision, maxPrecision), each=2),
+                  y=c(-2, 2, y1+2, y1-2), col="grey95", lty="blank")
+
+      } # end for.
+
+      ###
+      for (i in seq(nfm)) {   
+
+          y1 <- (log(FMM$pars[i,3])-centralGZ)*maxPrecision
+
+          ###
+          lines(c(minPrecision, maxPrecision), c(0,y1), lwd=2, lty=2, col=colvec[i]) 
+          
+          ###
+          points(xx[cluster_fmm==i], yy[cluster_fmm==i], 
+                 pch=21, col=colvec[i], bg=colvec[i], cex=1)
+
+      } # end for.
+
+      ###
+      legend("topleft", legend=paste("Cluster ",1:nfm,sep=""), pch=21, 
+             col=colvec[1:nfm][odrgXV], pt.bg=colvec[1:nfm][odrgXV], bty="n")
+
+      ###
+      ###-------------------------------------------------------------------------------
+      par(mfrow=c(1,1))
+      par(mar=c(4.1, 4.1, 2.1, 2.1))
+
+      ###
+      plot(x=meanGZ, y=abundance, xaxt="n", yaxt="n", log=ifelse(logx,"x",""), type="n",  
+           lwd=3, xlab="The mean of grain-size components (um)", ylab="Abundance (%)", 
+           mgp=c(2.3,1,0), cex.lab=1.5, cex.axis=1.5, cex=2)
+      grid(lwd=2, col="grey90", lty=1)
+      box(lwd=2)
+
+      ###
+      axis(side=1, at=myTK, labels=myLB, cex.axis=1.5, lwd=1.8)
+      axis(side=2, at=myTK2, labels=myTK2, cex.axis=1.5, lwd=1.8)
+
+      ###
+      for (i in 1:nfm) {
+
+          XV <- meanGZ[cluster_fmm==i]
+          YV <- abundance[cluster_fmm==i]
+          seXV <- sdGZ[cluster_fmm==i]
+
+          ###
+          xxv <- range(XV)
+          yyv <- range(YV)
+
+          ###
+          points(x=XV, y=YV, col=colvec[i], bg=colvec[i], pch=21, cex=1)
+
+          ###
+          arrows(x0=XV-seXV/2, y0=YV, x1=XV+seXV/2, y1=YV,
+                 code=3, lwd=2, angle=90, length=0.05, col=colvec[i])
+
+      } # end for.
+
+      ###
+      legend(ifelse(logx,"topleft","topright"), legend=paste("Cluster ",1:nfm,sep=""), 
+             pch=21, col=colvec[1:nfm][odrgXV], pt.bg=colvec[1:nfm][odrgXV], bty="n")
+
+      ###
+      ### THE FIFTH PART. 
+      ###================================================================================================
+      ###************************************************************************************************
+      scaleGS <- function(gsl, gsd) {
+    
+          Clay <- sum(gsd[gsl<2])
+
+          ###
+          veryFineSilt <- sum(gsd[gsl>=2 & gsl<4])
+
+          ###
+          fineSilt <- sum(gsd[gsl>=4 & gsl<8])
+
+          ###
+          mediumSilt <- sum(gsd[gsl>=8 & gsl<16])
+
+          ###
+          coarseSilt <- sum(gsd[gsl>=16 & gsl<31])
+
+          ###
+          veryCoarseSilt <- sum(gsd[gsl>=31 & gsl<63])
+
+          ###
+          veryFineSand <- sum(gsd[gsl>=63 & gsl<125])
+
+          ###
+          fineSand <- sum(gsd[gsl>=125 & gsl<250])
+
+          ###
+          mediumSand <- sum(gsd[gsl>=250 & gsl<500])
+
+          ###
+          coarseSand <- sum(gsd[gsl>=500 & gsl<1000])
+
+          ###
+          veryCoarseSand <- sum(gsd[gsl>=1000 & gsl<2000])
+
+          ###
+          c(Clay, veryFineSilt, fineSilt, mediumSilt, coarseSilt, 
+            veryCoarseSilt, veryFineSand, fineSand, mediumSand, 
+            coarseSand, veryCoarseSand)
+
+      } # end function scaleGS.
+
+      ###
+      if (ctype==2) {
+
+          mat <- t(sapply(GSDbatchx, function(x) scaleGS(x$gs.comp[,1],x$gs.comp[,2])))
+
+          ###
+          okcolumn <- apply(mat, MARGIN=2, function(x) any(x>0))
+
+          ###
+          mat <- mat[,okcolumn,drop=FALSE]
+
+      } else if (ctype==1) {
+
+          mat <- c()
+
+          ###
+          for (i in 1:Nx) {
+
+              abd <- GSDbatchx[[i]]$gs.pars[,1,drop=TRUE]
+              md <- GSDbatchx[[i]]$gs.pars[,idx,drop=TRUE]
+
+              ###
+              if (logx==TRUE) {
+
+                  abdmd <- sum(abd*md)
+
+              } else {
+
+                  abdmd <- sum(abd*log(md))
+
+              } # end if.
+
+              ###
+              domtabd <- if (max(abd)>90) 5 else 
+                         if (max(abd)>60) 3 else 
+                         if (max(abd)>30) 1 else 0
+
+              ###
+              x1 <- md[which.min(abd)]
+              y1 <- min(abd)
+ 
+              ###
+              x2 <- md[which.max(abd)]
+              y2 <- max(abd)
+
+              ###
+              x3 <- min(md)
+              y3 <- abd[which.min(md)]
+
+              ###
+              x4 <- max(md)
+              y4 <- abd[which.max(md)]
+
+              ###
+              if (length(abd)>1) {
+
+                  ###
+                  x11 <- md[(order(abd,decreasing=FALSE))[2]]
+                  y11 <- (sort(abd,decreasing=FALSE))[2]
+
+                  ###
+                  x22 <- md[(order(abd,decreasing=TRUE))[2]]
+                  y22 <- (sort(abd,decreasing=TRUE))[2]
+
+                  ###
+                  x33 <- (sort(md,decreasing=FALSE))[2]
+                  y33 <- abd[(order(md,decreasing=FALSE))[2]]
+
+                  ###
+                  x44 <- (sort(md,decreasing=TRUE))[2]
+                  y44 <- abd[(order(md,decreasing=TRUE))[2]]
+
+                  ###
+                  if (logx==TRUE) {
+
+                      rsdx <- sd(log(md))/mean(log(md))
+
+                  } else {
+
+                      rsdx <- sd(md)/mean(md)
+
+                  } # end if.
+
+                  ###
+                  rsdy <- sd(abd)/mean(abd)
+
+              } else {
+
+                  ###
+                  x11 <- x1
+                  y11 <- y1
+
+                  ###
+                  x22 <- x2
+                  y22 <- y2
+
+                  ###
+                  x33 <- x3
+                  y33 <- y3
+ 
+                  ###
+                  x44 <- x4
+                  y44 <- y4
+
+                  ###
+                  rsdx <- rsdy <- 0
+                  
+              } # end if. 
+
+              ###
+              if (logx==TRUE) {
+
+                  x1 <- log(x1)
+                  x2 <- log(x2)
+                  x3 <- log(x3)
+                  x4 <- log(x4)
+
+                  ###
+                  x11 <- log(x11)
+                  x22 <- log(x22)
+                  x33 <- log(x33)
+                  x44 <- log(x44)
+
+              } # end if.
+
+              ###
+              proxy <- c(length(abd), abdmd, domtabd, 
+                         x1, y1, x2, y2, 
+                         x3, y3, x4, y4, 
+                         rsdx, rsdy, 
+                         x11, y11, x22, y22, 
+                         x33, y33, x44, y44)
+  
+              ###
+              nameproxy <- c("ncomp","weightGZ","dominance",
+                             "GZminABD1","minABD1", "GZmaxABD1","maxABD1", 
+                             "minGZ1", "ABDminGZ1", "maxGZ1", "ABDmaxGZ1",
+                             "rsdGZ", "rsdABD",
+                             "GZminABD2","minABD2", "GZmaxABD2","maxABD2", 
+                             "minGZ2", "ABDminGZ2", "maxGZ2", "ABDmaxGZ2")
+              
+              ###
+              combIDX <- if (comb==1) {
+
+                  seq(11)
+
+              } else if (comb==2) {
+
+                  seq(21)
+
+              } else if (comb==3) {
+
+                  c(1,2,3, seq(from=5,to=21,by=2))
+
+              } else if (comb==4) {
+
+                  c(1,2,3, seq(from=5,to=11,by=2))
+
+              } else if (comb==5) {
+
+                  seq(from=5,to=21,by=2)
+
+              } else if (comb==6) {
+
+                  seq(from=5,to=11,by=2)       
+
+              } else if (comb==7) {
+
+                  c(1,2,3, seq(from=4,to=20,by=2))       
+
+              } else if (comb==8) {
+
+                  c(1,2,3, seq(from=4,to=10,by=2)) 
+
+              } else if (comb==9) {
+
+                  seq(from=4,to=20,by=2)
+
+              } else if (comb==10) {
+
+                  seq(from=4,to=10,by=2)
+
+              } # end if.   
+
+              mat <- rbind(mat, proxy[combIDX])
+
+          } # end for.
+
+      } # end if.
+      ###
+
+      ###
+      if (normthd=="minmax") {
+
+          mat1 <- apply(mat, MARGIN=2, function(x) (x-min(x))/(max(x)-min(x)))
+
+      } else if (normthd=="meansd") {
+      
+          mat1 <- apply(mat, MARGIN=2, function(x) (x-mean(x))/sd(x))
+
+      } else if (normthd=="sd") {
+
+          mat1 <- apply(mat, MARGIN=2, function(x) x/sd(x))
+
+      } # end if.
+
+      ###
+      HC <- hclust(dist(mat1,method=mdmc)^2, method=agm)
+      clutIDX <- as.numeric(cutree(tree=HC, k=nhc))
+
+      ###
+      ###--------------------------------------------------------------------------------------
+      par(mfrow=c(1,1))
+      par(mar=c(2.1, 2.1, 4.1, 2.1))
+      plot(1,1,type="n", xaxt="n", yaxt="n", bty="n", xlab="", ylab="", 
+           main="Pattern of unmixed GSDs", cex.main=2)
+
+      ###
+      mylegend <- c(paste("Total number of analysed single-sample GSDs:  ", N,sep=""), "",
+                    paste("Algorithm: Hierarchical clustering based on ",
+                          ifelse(ctype==1,"the unmixed results","the original GSDs"),sep=""),
+                    paste("Method used for data normalisation:  ", normthd, sep=""),
+                    paste("Method used for agglomeration:  ", agm, sep=""), 
+                    paste("Method used for distance matrix calculation:  ", mdmc, sep=""), "",
+                    paste("Number of GSDs belonging to type 1 :  ", sum(clutIDX==1), sep=""),
+                    paste("Number of GSDs belonging to type 2 :  ", sum(clutIDX==2), sep=""),
+                    paste("Number of GSDs belonging to type 3 :  ", sum(clutIDX==3), sep=""),
+                    paste("Number of GSDs belonging to type 4 :  ", sum(clutIDX==4), sep=""),
+                    paste("Number of GSDs belonging to type 5 :  ", sum(clutIDX==5), sep=""),
+                    paste("Number of GSDs belonging to type 6 :  ", sum(clutIDX==6), sep=""),
+                    paste("Number of GSDs belonging to type 7 :  ", sum(clutIDX==7), sep=""),
+                    paste("Number of GSDs belonging to type 8 :  ", sum(clutIDX==8), sep=""),
+                    paste("Number of GSDs belonging to type 9 :  ", sum(clutIDX==9), sep=""),
+                    paste("Number of GSDs belonging to type 10:  ", sum(clutIDX==10), sep=""),
+                    paste("Number of GSDs belonging to type 11:  ", sum(clutIDX==11), sep=""),
+                    paste("Number of GSDs belonging to type 12:  ", sum(clutIDX==12), sep=""),
+                    paste("Number of GSDs belonging to type 13:  ", sum(clutIDX==13), sep=""))
+      legend("top",legend=mylegend[1:(nhc+7)], bty="n", cex=1.25)
+
+      ###
+      ###--------------------------------------------------------------------------------------
+      layout(matrix(seq(nr*nc),nrow=nr, ncol=nc, byrow=TRUE), respect=TRUE)
+      par(mar=c(0.3,0.3,0.3,0.3))
+
+      ###
+      for (i in 1:nhc) {
+
+          IDX0 <- which(clutIDX==i)
+          ndx <- length(IDX0)
+
+          ###
+          for (j in 1:ndx) {
+
+              jthidx <- IDX0[j]
+ 
+              ###
+              plot(GSDbatchx[[jthidx]]$gs.pars[,c(idx,1),drop=FALSE], type="h", lwd=5, 
+                   log=ifelse(logx,"x",""), xaxt="n", yaxt="n", xlim=c(0.2,xupper), 
+                   ylim=c(0,yupper1), col=colvec[i])
+
+              ###
+              lines(GSDbatchx[[jthidx]]$gs.pars[,c(idx,1),drop=FALSE], lwd=3, col="purple")
+              axis(side=1, at=myTK1, labels=FALSE, cex.axis=2)
+              axis(side=2, at=myTK2, labels=FALSE, cex.axis=2)
+
+              ###
+              box(lwd=3, col=colvec[i])
+              text(x=1, y=80, labels=jthidx, cex=1.25, col=colvec[i])
+
+              ###
+              par("new"=TRUE)
+              plot(GSDbatchx[[jthidx]]$gs.comp[,c(1,2),drop=FALSE], type="l",  
+                   lwd=1, log=ifelse(logx,"x",""), xaxt="n", yaxt="n", bty="n",  
+                   xlim=c(0.2,xupper), ylim=c(0,yupper2), col="grey30")
+
+          } # end for.
+
+      } # end for.
+    
+      ###
+      dev.off()
+
+      ###
+      gsfit <- data.frame((seq(N))[ookk], MDL, compvec, FOM, RSS, R2, RSE)
+      rownames(gsfit) <- NULL
+      colnames(gsfit) <- c("NO","Model","ncomp","FOM", "RSS", "R2", "RSE")
+    
+      ###
+      pgsp <- cbind(rep((seq(N))[ookk],times=compvec),
+                    medianGZ, medianKM, modeGZ, modeKM, meanGZ, sdGZ, cluster_fmm, abundance)
+      rownames(pgsp) <- NULL
+      colnames(pgsp) <- c("NO","Median", "MedianKM", "Mode", "ModeKM", "Mean", "Sd", "MeanFMM", "Abundance")
+
+      ###  
+      colnames(mat) <- nameproxy[combIDX]
+      gspattern <- cbind("NO"=(seq(N))[ookk], mat, "type"=clutIDX)
+
+      ###
+      output <- list("gsfit"=gsfit, "pgsp"=pgsp, "gspattern"=gspattern)
+     
+      ###
+      if (csv==TRUE) {
+
+          if (!is.null(obj_batchgsd)) {
+       
+              write.csv(gsfit, file="ussGSDbatch_gsfit.csv")
+              write.csv(pgsp, file="ussGSDbatch_pgsp.csv")
+              write.csv(gspattern, file="ussGSDbatch_gspattern.csv")
+
+          } else {
+
+              write.csv(gsfit, file=paste(xoxoxo,"_gsfit.csv",sep=""))
+              write.csv(pgsp, file=paste(xoxoxo,"_pgsp.csv",sep=""))
+              write.csv(gspattern, file=paste(xoxoxo,"_gspattern.csv",sep=""))
+
+          } # end if. 
+
+      } # end if.
+
+      ###
+      invisible(output)
+
+  } # end function summary_ussGSDbatch.
+  ###==========================================================================================================================
+  ###
+  
+  ###**************************************************************************************************************************
+  ### Function update_ussGSDbatch() is used to update (re-analyze) the   
+  ### unmixing results of some specified grain-size distributions. 
+  ###==========================================================================================================================
+  ### The function contains the following arguments.
+  ###
+  ### obj_batchgsd: an S3 object of class "gsdbatch" generated using the function 
+  ###               ussGSDbatch(), ussGSDbatchp(), update_ussGSDbatch(), or update_ussGSDbatchp().
+  ###
+  ###     sampleNO: An integer vector indicating the ID numbers of the grain-size  
+  ###              distributions to be updated (re-analyzed). 
+  ###
+  ###        ncomp: An integer (with values range from 1 to 13) indicating the number of 
+  ###               components for the grain-size distributions to be re-analyzed. 
+  ###
+  ###         auto: A logical value indicating whether performing a automatic grain-size unmixing, 
+  ###               in this case the user needs not to specify the initials used for optimization.
+  ###
+  ###        model: A character indicating the model to be fitted, "weibull", or "lognormal".
+  ###               if model=NULL, the program will automatically determine the optimal model 
+  ###               which yields a smaller FOM or RSS value.
+  ###
+  ###          mpd: An integer indicating the minimum distance (in indices) of peaks to be identified.
+  ###
+  ###          ctf: A numeric value (between -1 and 1) representing a critical threshold factor  
+  ###               that controls the identification of peaks from the grain-size distribution.  
+  ###               This argument can be used to prevent identifying a false peak characterised  
+  ###               by a large positive second-order derivative. Specially, ctf=0 indicates
+  ###               that peaks with second-order derivatives above zero will be precluded. 
+  ###               The degree of precluding will be increasingly suppressed as ctf increases
+  ###               from -1 to 1. 
+  ###
+  ###         ntry: An integer value indicating the number of trials in a trial-and-error protocol. 
+  ###
+  ###          kkf: A numeric value controlling the range of values from which random starting   
+  ###               parameters will be generated during the "trial-and-error" protocol.
+  ###
+  ###    startPars: A two-row matrix containing starting parameters used for unmixing, the first
+  ###               row contains the modes of individual components, and the second row contains
+  ###               the alpha (Weibull distribution) or sigma (Lognormal distribution) value of 
+  ###               individual components.
+  ###
+  ###   alphaRange: A two-element vector indicating the lower and upper limits on alpha values  
+  ###               of a Weibull distribution generated from a Uniform distribution.
+  ###
+  ###   sigmaRange: A two-element vector indicating the lower and upper limits on sigma values 
+  ###               of a Lognormal distribution generated from a Uniform distribution.
+  ###
+  ###     useIndex: A logical value indicating whether the index of a grain-size level will be  
+  ###               used as the x-coordinate during the unmixing process.
+  ###
+  ###      minfunc: A character indicating the objective to be mimimized, either "fom" or "rss", 
+  ###               for the figure-of-merit value or the residual sum of squares, respectively.
+  ###
+  ###         trim: A logical value indicating whether the unmixing results will be trimed  
+  ###               using a recursive optimization protocol.
+  ###
+  ###         mrsl: A numeric value indicating the minimum resolution between two adjacent     
+  ###               components used to trim the unmixing results, which ranges from 0.1 to 1.
+  ###
+  ###       rmZero: A logical value indicating whether zero volume percentages will be removed.
+  ###
+  ###       saveRD: A logical value indicating whether the updated results will be saved to
+  ###               the RDdata file in the current directory.
+  ###==========================================================================================================================
+  ### The function
+  ### (1) Returns a invisible list of S3 class of "batchgsd" containing the unmixed  
+  ###     results of individual samples.
+  ###
+  ### (2) Re-write the loaded RData file containing the updated unmixing results 
+  ###     in the current working directory if obj_batchgsd=NULL and saveRD=TRUE.
+  ###
+  ### Note that if obj_batchgsd=NULL, the user needs to ensure that the function load_ussGSDbatch() 
+  ### has been called and an object R "GSDbatch" has been loaded from the RData file which is  
+  ### available in the current working directory.
+  ###==========================================================================================================================
+  update_ussGSDbatch <- function(obj_batchgsd=NULL, sampleNO, ncomp=NULL, auto=TRUE, model="weibull", 
+                                 mpd=6, ctf=0.1, ntry=100, kkf=0.1, startPars=NULL, alphaRange=NULL,  
+                                 sigmaRange=NULL, useIndex=TRUE, minfunc="fom", trim=FALSE, mrsl=0.6, 
+                                 rmZero=TRUE, saveRD=TRUE) {
+
+      if (!is.null(obj_batchgsd)) {
+
+          if(class(obj_batchgsd)!="batchgsd") 
+              stop("Error: [obj_batchgsd] should be an S3 object of class 'batchgsd'!")
+
+          ###
+          GSDbatch <- obj_batchgsd
+
+      } else {
+
+          if (!exists("gsdbatch")) 
+              stop("Error: function [load_ussGSDbatch] has not been called!")
+
+          ###
+          GSDbatch <- get("GSDbatch", envir=gsdbatch)
+
+          ###
+          xoxoxo <- get("xoxoxo", envir=gsdbatch)
+
+      } # end if.
+
+      ###
+      allmyNO <- as.numeric(substring(text=names(GSDbatch), first=3))
+
+      ###
+      if (!all(sampleNO %in% allmyNO)) {
+
+          XNO <- sampleNO[!(sampleNO %in% allmyNO)]
+
+          ###
+          cat("The following sample numbers are invalid:\n")
+          print(XNO)
+
+          ###
+          return()
+
+      } # end if.
+
+      ###
+      N <- length(sampleNO)
+
+      ###
+      for (i in seq(N)) {
+
+          ###
+          cat("The ", sampleNO[i], "-th single-sample GSD.\n",sep="")
+
+          ###
+          gsl <- GSDbatch[[sampleNO[i]]]$gs.comp[,1]
+          gsd <- GSDbatch[[sampleNO[i]]]$gs.comp[,2]
+          expGSlev <- GSDbatch[[sampleNO[i]]]$expGSlev
+
+          ###
+          if (!is.null(model)) {
+     
+              res_ussGSD <- try(ussGSD(gsl=gsl, gsd=gsd, ncomp=ncomp, expGSlev=expGSlev,  
+                                       auto=auto, model=model, mpd=mpd, ctf=ctf, ntry=ntry, 
+                                       kkf=kkf, startPars=startPars, alphaRange=alphaRange, 
+                                       sigmaRange=sigmaRange, useIndex=useIndex, minfunc=minfunc, 
+                                       trim=trim, mrsl=mrsl, viewAutoInis=FALSE, viewLM=FALSE, 
+                                       viewFit=FALSE, outfile=NULL, rmZero=rmZero, plot=FALSE), 
+                                       silent=TRUE)
+  
+              ###
+              if (class(res_ussGSD)!="try-error") { 
+
+                  GSDbatch[[sampleNO[i]]] <- res_ussGSD 
+
+                  ###
+                  if (N==1) 
+                      plot_ussGSD(obj_ussgsd=GSDbatch[[sampleNO[i]]], sampleNO=sampleNO[i])
+
+              } else {
+
+                  print(res_ussGSD)
+
+              } # end if. 
+
+          } else {
+
+              res_ussGSDwb <- try(ussGSD(gsl=gsl, gsd=gsd, ncomp=ncomp, expGSlev=expGSlev,  
+                                         auto=auto, model="weibull", mpd=mpd, ctf=ctf, ntry=ntry, 
+                                         kkf=kkf, startPars=startPars, alphaRange=alphaRange, 
+                                         sigmaRange=sigmaRange, useIndex=useIndex, minfunc=minfunc, 
+                                         trim=trim, mrsl=mrsl, viewAutoInis=FALSE, viewLM=FALSE, 
+                                         viewFit=FALSE, outfile=NULL, rmZero=rmZero, plot=FALSE), 
+                                         silent=TRUE)
+
+              ###
+              res_ussGSDlg <- try(ussGSD(gsl=gsl, gsd=gsd, ncomp=ncomp, expGSlev=expGSlev,  
+                                         auto=auto, model="lognormal", mpd=mpd, ctf=ctf, ntry=ntry, 
+                                         kkf=kkf, startPars=startPars, alphaRange=alphaRange, 
+                                         sigmaRange=sigmaRange, useIndex=useIndex, minfunc=minfunc, 
+                                         trim=trim, mrsl=mrsl, viewAutoInis=FALSE, viewLM=FALSE, 
+                                         viewFit=FALSE, outfile=NULL, rmZero=rmZero, plot=FALSE),
+                                         silent=TRUE)
+
+              ###
+              if (class(res_ussGSDwb)!="try-error" && class(res_ussGSDlg)!="try-error") {
+
+                  if (minfunc=="fom") {
+
+                      minfuncVAL1 <- res_ussGSDwb$FOM
+                      minfuncVAL2 <- res_ussGSDlg$FOM
+
+                  } else {
+
+                      minfuncVAL1 <- res_ussGSDwb$RSS
+                      minfuncVAL2 <- res_ussGSDlg$RSS
+
+                  } # end if.
+
+                  ###
+                  if (minfuncVAL1<minfuncVAL2) {
+
+                      GSDbatch[[sampleNO[i]]] <- res_ussGSDwb
+
+                  } else {
+
+                      GSDbatch[[sampleNO[i]]] <- res_ussGSDlg
+
+                  } # end if. 
+
+                  ###
+                  if (N==1) 
+                      plot_ussGSD(obj_ussgsd=GSDbatch[[sampleNO[i]]], sampleNO=sampleNO[i])
+
+              } else if (class(res_ussGSDwb)!="try-error") {
+
+                  GSDbatch[[sampleNO[i]]] <- res_ussGSDwb
+
+                  ###
+                  if (N==1) 
+                      plot_ussGSD(obj_ussgsd=GSDbatch[[sampleNO[i]]], sampleNO=sampleNO[i])
+
+                  ###
+                  print(res_ussGSDlg)
+
+              } else if (class(res_ussGSDlg)!="try-error") {
+
+                  GSDbatch[[sampleNO[i]]] <- res_ussGSDlg
+
+                  ###
+                  if (N==1) 
+                      plot_ussGSD(obj_ussgsd=GSDbatch[[sampleNO[i]]], sampleNO=sampleNO[i]) 
+
+                  ###
+                  print(res_ussGSDwb)
+
+              } else {
+
+                  print(res_ussGSDwb)
+                  print(res_ussGSDlg)
+
+              } # end if.
+
+          } # end if.
+
+      } # end for.  
+
+      ###
+      if (is.null(obj_batchgsd)) {
+
+          assign("GSDbatch", GSDbatch, envir=gsdbatch)
+
+          ###
+          if (saveRD==TRUE) {
+
+              save(GSDbatch, file=paste(xoxoxo, ".RData", sep=""))
+
+          } # end if.
+
+      } # end if. 
+
+      ###
+      invisible(GSDbatch)
+
+  } # end function update_ussGSDbatch.
+  ###==========================================================================================================================
+  ###
+
+
+  ###
+  ###**************************************************************************************************************************
+  ### Function plot_ussGSDbatch() is used for visualizing the unmixing results
+  ### of grain-size distributions obtained from a batch model using a PDF file. 
+  ###==========================================================================================================================
+  ### The function contains the following arguments.
+  ###
+  ### obj_batchgsd: an S3 object of class "gsdbatch" generated using the function 
+  ###               ussGSDbatch(), ussGSDbatchp(), update_ussGSDbatch(), or update_ussGSDbatchp().
+  ###
+  ###      pdfname: A character indicating the name of the PDF file to be generated.
+  ###               A default PDF name with postfix "_plot" will be used if pdfname=NULL. 
+  ###
+  ###        addvl: A logical value indicating whether vertical lines will be added to  
+  ###               the unmixed grain-size components visualized using a pdf file. 
+  ###
+  ###        logxy: A character indicating whether the x- or y-axis will be logged in the plot, 
+  ###               one of "", "x", "y", "xy", or NULL.
+  ###
+  ###          lwd: A numeric value giving the widths of lines in the PDF file.
+  ###       
+  ###          pch: An integer giving the type of symbols in the PDF file.
+  ### 
+  ###          cex: A numeric value giving the size of symbols in the PDF file.
+  ###==========================================================================================================================
+  ### The function generates a PDF file in the current working directory.
+  ###
+  ### Note that if obj_batchgsd=NULL, the user needs to ensure that the function load_ussGSDbatch() 
+  ### has been called and an object R "GSDbatch" has been loaded from the file "ussGSDbatch.RData" 
+  ### available in the current working directory.
+  ###==========================================================================================================================
+  plot_ussGSDbatch <- function(obj_batchgsd=NULL, pdfname=NULL, addvl=TRUE, 
+                               logxy="x", lwd=3, pch=21, cex=2) {
+
+      if (!is.null(obj_batchgsd)) {
+
+          if(class(obj_batchgsd)!="batchgsd") 
+              stop("Error: [obj_batchgsd] should be an S3 object of class 'batchgsd'!")
+
+          ###
+          GSDbatch <- obj_batchgsd
+
+      } else {
+
+          if (!exists("gsdbatch")) 
+              stop("Error: function [load_ussGSDbatch] has not been called!")
+
+          ###
+          GSDbatch <- get("GSDbatch", envir=gsdbatch)
+
+          ###
+          xoxoxo <- get("xoxoxo", envir=gsdbatch)
+
+      } # end if.
+
+      ###
+      N <- length(GSDbatch)
+
+      ###
+      if (is.null(pdfname)) {
+
+          if (!is.null(obj_batchgsd)) {
+
+              pdf("ussGSDbatch_plot.pdf",sep="")
+
+          } else {
+
+              pdf(paste(xoxoxo,"_plot.pdf",sep=""))
+
+          } # end if.
+
+      } else {
+
+          pdf(paste(pdfname,"_plot.pdf",sep=""))
+
+      } # end if.
+
+      ###
+      for (j in 1:N) {
+
+          if (is.null(GSDbatch[[j]])) { 
+
+              cat("Result of the ", j, "-th single-sample GSD is unavailable!\n",sep="")
+
+          } else {
+
+              plot_ussGSD(obj_ussgsd=GSDbatch[[j]], sampleNO=j, addvl=addvl, 
+                          logxy=logxy, lwd=lwd, pch=pch, cex=cex)
+
+          } # end if. 
+
+      } # end for. 
+
+      ###
+      dev.off()
+
+  } # end function plot_ussGSDbatch.
+  ###==========================================================================================================================
+  ###
+
+  ###
+  ###**************************************************************************************************************************
+  ### Function load_ussGSDbatch() is used for loading a existing RData file from the
+  ### current working directory into the R platform and creating a new environment
+  ### called "gsdbatch" to hold the loaded object "GSDbatch". 
+  ###==========================================================================================================================
+  ### The function contains the following arugements.
+  ###
+  ### obj_batchgsd: an S3 object of class "gsdbatch" generated using the function
+  ###               ussGSDbatch(), ussGSDbatchp(), update_ussGSDbatch(), or update_ussGSDbatchp(). 
+  ###
+  ###       rdname: A character indicating the name of the RData file generated using 
+  ###               the function ussGSDbatch() or ussGSDbatchp() that will be loaded.  
+  ###               The RData file should be available from the current working directory.
+  ###==========================================================================================================================
+  ### The function creats a global environment called "gsdbatch" used  for holding the loaded R object "GSDbatch".
+  ###
+  ### Note that if obj_batchgsd is specified (not NULL), rdname will not be used. 
+  ###==========================================================================================================================
+  load_ussGSDbatch <- function(obj_batchgsd=NULL, rdname="ussGSDbatch") {
+
+      if (!is.null(obj_batchgsd)) {
+
+          if(class(obj_batchgsd)!="batchgsd") 
+              stop("Error: [obj_batchgsd] should be an S3 object of class 'batchgsd'!")
+
+          ###
+          GSDbatch <- obj_batchgsd
+
+          ###
+          xoxoxo <- NULL
+
+      } else {
+
+          file_name <- list.files()
+
+          ###
+          myFILE <- paste(rdname, ".RData", sep="")
+
+          ### 
+          if (!myFILE %in% file_name) 
+              stop(paste("Cannot find file '",myFILE,"' in the current working directory!",sep=""))
+
+          ###
+          load(myFILE)
+
+          ###
+          if (!exists("GSDbatch"))
+              stop("Error: the loaded RData is invalid!")
+
+          ###
+          if(class(GSDbatch)!="batchgsd") 
+              stop("Error: the loaded RData should be an S3 object of class 'batchgsd'!")
+
+          ###
+          xoxoxo <- rdname
+
+      } # end if.
+      ###
+
+      ###
+      cat("Note: a new environment called [gsdbatch] is created to hold object 'GSDbatch'!\n")
+      gsdbatch <<- new.env()
+
+      ###
+      assign("GSDbatch", GSDbatch, envir=gsdbatch)
+      assign("xoxoxo", xoxoxo, envir=gsdbatch)
+
+  } # end function load_ussGSDbatch.
+  ###==========================================================================================================================
+  ###
+
+  ###
+  ###**************************************************************************************************************************
+  ### Function ussGSDbatch() is used for performing the unmixing of single-sample  
+  ### grain-size distributions for a number of samples in a batch pattern. 
+  ###==========================================================================================================================
+  ### The function contains the following arguments.
+  ###
+  ###    GSDmat: A matrix storing the grain-size data used for analysis. The first row is 
+  ###            the grain-size levels, and the remaining rows are the volume percentages 
+  ###            of individual samples to be unmixed. 
+  ###
+  ###     ncomp: An integer (from 1 to 13) indicating the number of components to be fitted. 
+  ###
+  ###  expGSlev: A logical value indicating whether the grain-size level [gsl] is of 
+  ###            exponential scale.
+  ###
+  ###      auto: A logical value indicating whether performing a automatic grain-size unmixing, 
+  ###            in this case the user needs not to specify the initials used for optimization.
+  ###
+  ###     model: A character indicating the model to be fitted, "weibull", or "lognormal".
+  ###            if model=NULL, the program will automatically determine the optimal model 
+  ###            which yields a smaller FOM or RSS value.
+  ###
+  ###       mpd: An integer indicating the minimum distance (in indices) of peaks to be identified.
+  ###
+  ###       ctf: A numeric value (between -1 and 1) representing a critical threshold factor  
+  ###            that controls the identification of peaks from the grain-size distribution.  
+  ###            This argument can be used to prevent identifying a false peak characterized  
+  ###            by a large positive second-order derivative. Specially, ctf=0 indicates
+  ###            that peaks with second-order derivatives above zero will be precluded. 
+  ###            The degree of precluding will be increasingly suppressed as ctf increases 
+  ###            from -1 to 1. 
+  ###
+  ###      ntry: An integer indicating the number of trials in a trial-and-error protocol. 
+  ###
+  ###       kkf: A numeric value controlling the range of values from which random starting   
+  ###            parameters will be generated during the "trial-and-error" protocol.
+  ###
+  ### startPars: A two-row matrix containing starting parameters used for unmixing, the first
+  ###            row contains the modes of individual components, and the second row contains
+  ###            the alpha (Weibull distribution) or sigma (Lognormal distribution) value of 
+  ###            individual components.
+  ###
+  ###alphaRange: A two-element vector indicating the lower and upper limits on alpha values of 
+  ###            a Weibull distribution generated from a Uniform distribution.
+  ###
+  ###sigmaRange: A two-element vector indicating the lower and upper limits on sigma values of
+  ###            a Lognormal distribution generated from a Uniform distribution.
+  ###
+  ###  useIndex: A logical value indicating whether the index of a grain-size level will be  
+  ###            used as the x-coordinate during the fitting process.
+  ###
+  ###   minfunc: A character indicating the objective to be mimimized, either "fom" or "rss",
+  ###            for the figure-of-merit value or the residual sum of squares, respectively.
+  ###
+  ###      trim: A logical value indicating whether the unmixing results will be trimed  
+  ###            using a recursive optimization protocol.
+  ###
+  ###      mrsl: A numeric value indicating the minimum resolution between two adjacent     
+  ###            components used to trim the unmixing results, which ranges from 0.1 to 1.
+  ###
+  ###    rmZero: A logical value indicating whether removing zeros from the volume percentages.
+  ### 
+  ###   pdfname: A character indicating the name of the PDF file the unmixed results will  
+  ###            be written to. The results will not be returned to a PDF file if pdfname=NULL.
+  ###
+  ###     addvl: A logical value indicating whether vertical lines will be added to the unmixed 
+  ###            grain-size components when visualizing the results using a PDF file. 
+  ###
+  ###     logxy: A character indicating whether the x- or y-axis will be logged in the PDF file, 
+  ###            one of "", "x", "y", "xy", or NULL.
+  ###
+  ###       lwd: A numeric value giving the widths of lines in the PDF file.
+  ###       
+  ###       pch: An integer giving the type of symbols in the PDF file.
+  ### 
+  ###       cex: A numeric value giving the size of symbols in the PDF file.
+  ###
+  ###    rdname: A character indicating the name of the RDdata file the unmixed results will  
+  ###            be written to. The results will not be returned to a RDdata file if rdname=NULL.
+  ###==========================================================================================================================
+  ### The function
+  ###
+  ### (1) Returns a invisible list of S3 object of class "batchgsd" containing 
+  ###     the unmixing results of individual samples.
+  ###
+  ### (2) Generates a PDF file named "ussGSDbatch" ("or_a_different_name") showing the unmixed 
+  ###     results in the current working directory if pdfname="ussGSDbatch" ("or_a_different_name").
+  ###
+  ### (3) Generates a RData file named "ussGSDbatch" ("or_a_different_name") containing the unmixed  
+  ###     results in the current working directory if rdname="ussGSDbatch" ("or_a_different_name").
+  ###==========================================================================================================================
+  ussGSDbatch <- function(GSDmat, ncomp=NULL, expGSlev=TRUE, auto=TRUE, model="weibull",  
+                          mpd=6, ctf=0.1, ntry=100, kkf=0.1, startPars=NULL, alphaRange=NULL, 
+                          sigmaRange=NULL, useIndex=TRUE, minfunc="fom", trim=FALSE, mrsl=0.6,    
+                          rmZero=TRUE, pdfname="ussGSDbatch", addvl=TRUE, logxy="x", lwd=3, 
+                          pch=21, cex=2, rdname="ussGSDbatch") {
+
+      GSDmat <- as.matrix(GSDmat)
+      if(nrow(GSDmat)<2) 
+          stop("Error: [GSDmat] should contain at least two rows!")
+
+      ###
+      gsl <- GSDmat[1,]
+      GSD <- GSDmat[-1,,drop=FALSE]
+
+      ###
+      if(any(diff(gsl)<=0)) 
+          stop("Error: grain-size levels in the first row of [GSDmat] are incorrect!")
+
+      ###
+      if (!is.null(pdfname) && !is.character(pdfname)) 
+           stop("Error: [pdfname] should be NULL or character!")
+
+      ###
+      if (!is.null(rdname) && !is.character(rdname)) 
+           stop("Error: [rdname] should be NULL or character!")
+      
+      ###
+      N <- nrow(GSD)
+      GSDbatch <- vector(length=N, mode="list")
+
+      ###
+      for (i in 1:N) {
+
+          cat("The ", i, "-th single-sample GSD.\n",sep="")
+
+          ###
+          if (!is.null(model)) {
+
+              res_ussGSD <- try(ussGSD(gsl=gsl, gsd=GSD[i,], ncomp=ncomp, expGSlev=expGSlev, 
+                                       auto=auto, model=model, mpd=mpd, ctf=ctf, ntry=ntry, 
+                                       kkf=kkf, startPars=startPars, alphaRange=alphaRange, 
+                                       sigmaRange=sigmaRange, useIndex=useIndex, minfunc=minfunc, 
+                                       trim=trim, mrsl=mrsl, viewAutoInis=FALSE, viewLM=FALSE, 
+                                       viewFit=FALSE, outfile=NULL, rmZero=rmZero, plot=FALSE), 
+                                       silent=TRUE)
+
+              ###
+              if (class(res_ussGSD)!="try-error") { 
+
+                  GSDbatch[[i]] <- res_ussGSD 
+
+              } else {
+
+                  print(res_ussGSD)
+
+              } # end if. 
+
+          } else {
+
+              res_ussGSDwb <- try(ussGSD(gsl=gsl, gsd=GSD[i,], ncomp=ncomp, expGSlev=expGSlev, 
+                                         auto=auto, model="weibull", mpd=mpd, ctf=ctf, ntry=ntry, 
+                                         kkf=kkf, startPars=startPars, alphaRange=alphaRange, 
+                                         sigmaRange=sigmaRange, useIndex=useIndex, minfunc=minfunc, 
+                                         trim=trim, mrsl=mrsl, viewAutoInis=FALSE, viewLM=FALSE, 
+                                         viewFit=FALSE, outfile=NULL, rmZero=rmZero, plot=FALSE), 
+                                         silent=TRUE)
+
+              ###
+              res_ussGSDlg <- try(ussGSD(gsl=gsl, gsd=GSD[i,], ncomp=ncomp, expGSlev=expGSlev, 
+                                         auto=auto, model="lognormal", mpd=mpd, ctf=ctf, ntry=ntry, 
+                                         kkf=kkf, startPars=startPars, alphaRange=alphaRange, 
+                                         sigmaRange=sigmaRange, useIndex=useIndex, minfunc=minfunc, 
+                                         trim=trim, mrsl=mrsl, viewAutoInis=FALSE, viewLM=FALSE, 
+                                         viewFit=FALSE, outfile=NULL, rmZero=rmZero, plot=FALSE), 
+                                         silent=TRUE)
+
+              ###
+              if (class(res_ussGSDwb)!="try-error" && class(res_ussGSDlg)!="try-error") {
+
+                  if (minfunc=="fom") {
+
+                      minfuncVAL1 <- res_ussGSDwb$FOM
+                      minfuncVAL2 <- res_ussGSDlg$FOM
+
+                  } else {
+
+                      minfuncVAL1 <- res_ussGSDwb$RSS
+                      minfuncVAL2 <- res_ussGSDlg$RSS
+
+                  } # end if.
+
+                  ###
+                  if (minfuncVAL1<minfuncVAL2) {
+
+                      GSDbatch[[i]] <- res_ussGSDwb
+
+                  } else {
+
+                      GSDbatch[[i]] <- res_ussGSDlg
+
+                  } # end if. 
+
+              } else if (class(res_ussGSDwb)!="try-error") {
+
+                  GSDbatch[[i]] <- res_ussGSDwb
+
+                  ###
+                  print(res_ussGSDlg)
+
+              } else if (class(res_ussGSDlg)!="try-error") {
+
+                  GSDbatch[[i]] <- res_ussGSDlg
+
+                  ###
+                  print(res_ussGSDwb)
+
+              } else {
+
+                  print(res_ussGSDwb)
+                  print(res_ussGSDlg)
+
+              } # end if.
+
+          } # end if. 
+
+      } # end for.
+
+      ###
+      names(GSDbatch) <- paste("NO",1:N,sep="")
+      class(GSDbatch) <- "batchgsd"
+
+      ###
+      if (!is.null(pdfname)) {
+     
+          ###
+          plot_ussGSDbatch(obj_batchgsd=GSDbatch, pdfname=pdfname, 
+                           addvl=addvl, logxy=logxy, lwd=lwd, pch=pch, cex=cex) 
+
+      } # end if.
+
+      ###
+      if (!is.null(rdname)) {
+
+          save(GSDbatch, file=paste(rdname,".RData",sep=""))
+
+      } # end if.
+
+      ###
+      invisible(GSDbatch)
+
+  } # end function ussGSDbatch.
+  ###==========================================================================================================================
+  ###
+  
+
+  ###
+  ###**************************************************************************************************************************
+  ### Function plot_ussGSD() is used for ploting the unmixing result of a single-sample grain-size distribution.
+  ###==========================================================================================================================
+  ### The function contains the following arguments.
+  ###
+  ###obj_ussgsd: A S3 objective of class "ussgsd" generated using function ussGSD().
+  ###
+  ###  sampleNO: An integer indicating the ID number of the grain-size distribution. 
+  ### 
+  ###     addvl: A logical value indicating whether vertical lines will be added to 
+  ###            the plot showing the unmixed grain-size components.
+  ###
+  ###     logxy: A character indicating whether the x- or y-axis will be logged in the plot, 
+  ###            one of "", "x", "y", "xy", or NULL. 
+  ###
+  ###       lwd: A numeric value giving the widths of lines in the plot.
+  ###       
+  ###       pch: An integer giving the type of symbols in the plot.
+  ### 
+  ###       cex: A numeric value giving the size of symbols in the plot.
+  ###==========================================================================================================================
+  ### The function returns a plot showing the unmixing result of a single-samples grain-size distribution.
+  ### The plot consists of four sub-plots containing the following results:
+  ###
+  ### (1) The measured and fitted grain-size volume percentage, and the unmixed individual grain-size components.
+  ###
+  ### (2) A histogram showing the residuals calculated using the best set of optimized parameters.
+  ### 
+  ### (3) A histogram showing all figure-of-merit (FOM) values obtained from the "trial-and-error" protocol.
+  ###
+  ### (4) A histogram showing all residual sum square (RSS) values obtained from the "trial-and-error" protocol.
+  ###==========================================================================================================================
+  plot_ussGSD <- function(obj_ussgsd, sampleNO=NULL, addvl=TRUE,  
+                          logxy="x", lwd=3, pch=21, cex=2) {
+
+      if (class(obj_ussgsd)!="ussgsd") 
+          stop("Error: [obj_ussgsd] should be an object of class 'ussgsd'!")
+
+      ###
+      origin_xd <- obj_ussgsd$gs.comp[,1]
+      yd <- obj_ussgsd$gs.comp[,2]
+
+      ###
+      if (ncol(obj_ussgsd$gs.comp)>2) {
+
+          yd_fit <- obj_ussgsd$gs.comp[,3]
+          mat <- obj_ussgsd$gs.comp[,-(1:3),drop=FALSE]
+
+      } # end if.
+       
+      ###
+      reserveidx <- obj_ussgsd$reserveidx
+      tmdxv <- obj_ussgsd$mdxv
+      tmdyv <- obj_ussgsd$mdyv
+      model <- obj_ussgsd$model
+      ncomp <- obj_ussgsd$ncomp
+      residuals <- obj_ussgsd$residuals
+      fom0vec <- obj_ussgsd$FOMs
+      rss0vec <- obj_ussgsd$RSSs
+      resolution <- obj_ussgsd$resolution
+      fom <- obj_ussgsd$FOM
+      rss <- obj_ussgsd$RSS
+      R2 <- obj_ussgsd$R2
+      RSE <- obj_ussgsd$RSE
+      acpt <- obj_ussgsd$acpt
+      normTEST <- obj_ussgsd$normTest
+
+      ###
+      if (is.null(logxy)) { 
+
+          boolean1x <- obj_ussgsd$expGSlev
+
+          ###
+          mdyv <- obj_ussgsd$mdyv
+
+          if (!is.null(mdyv)) {
+
+              boolean2x <- 16*min(mdyv)<max(mdyv)
+
+          } else {
+
+              boolean2x <- FALSE
+
+          } # end if. 
+            
+          ###      
+          if (boolean1x && boolean2x) {
+
+              logxy <- "xy"
+
+          } else if (boolean1x) {
+                    
+              logxy <- "x"
+
+          } else if (boolean2x) {
+
+              logxy <- "y"
+
+          } else {
+
+              logxy <- ""
+
+          } # end if. 
+
+      } # end if.
+      ###
+
+      ###
+      oldpar <- par("mar", "mfrow")
+      on.exit(par(oldpar))
+
+      ###
+      myTK <- c(0.1,0.2,0.5,1,2,5,10,20,50,100,200,500,1000,2000)
+      myLB <- c("0.1","0.2","0.5","1","2","5","10","20","50",
+                "100","200","500","1000","2000")
+      ###
+      lineCol <- c("deepskyblue", "orangered", "purple",   "violetred", 
+                   "yellowgreen", "lightblue", "goldenrod", "forestgreen", 
+                   "blue",  "plum", "tan", "violet", "grey50") 
+
+      ###
+      layout(matrix(c(1,1,1,2,1,1,1,3,1,1,1,4),ncol=3), respect=TRUE)
+      par(mar=c(4,5,2,0.5)+0.1)
+
+      ###
+      if (length(reserveidx)>0) {
+
+          plot(origin_xd[reserveidx], yd[reserveidx], type="n", cex.lab=2, log=logxy, cex.axis=2, 
+               mgp=c(3.2,1,0), xlab="Grain size (um)", ylab="Volume percentage (%)", xaxt="n") 
+
+      } else {
+
+          plot(origin_xd, yd, type="n", cex.lab=2, log=logxy, cex.axis=2, mgp=c(3.2,1,0), 
+               xlab="Grain size (um)", ylab="Volume percentage (%)", xaxt="n") 
+
+      } # end if. 
+
+      ###
+      XaxisCentral <- median(axTicks(side=1))
+
+      ###
+      box(lwd=2,lwd=2)
+
+      ###
+      axis(side=1, at=myTK, labels=myLB, cex.axis=2)
+ 
+      ###
+      points(origin_xd[reserveidx], yd[reserveidx], type="p", 
+             lwd=2, pch=pch, col="grey50", cex=cex) 
+
+      ###
+      mypos <- mean(yd[reserveidx][origin_xd[reserveidx]<=XaxisCentral])<
+                    mean(yd[reserveidx][origin_xd[reserveidx]>XaxisCentral]) 
+
+      ###
+      if (ncol(obj_ussgsd$gs.comp)>2) {
+
+          points(origin_xd, yd_fit, col="grey30", type="l", lwd=lwd)
+  
+          ###
+          for (i in seq(ncomp))  {
+
+              points(origin_xd, mat[,i], col=lineCol[i], type="l", lwd=lwd)  
+
+              ###
+              if (addvl==TRUE) {               
+                 
+                  points(x=c(0,tmdxv[i],tmdxv[i]),y=c(tmdyv[i],tmdyv[i],0), 
+                         col=lineCol[i], type="l", lwd=lwd)
+
+              } # end if.
+
+           } # end for.     
+
+           ###
+           if (!is.null(sampleNO)) {
+
+               legend(ifelse(mypos,"topleft","topright"),
+                      legend=c("Measured","Fitted", 
+                      paste("Comp.",seq(ncomp),sep=""),
+                      paste("NO:",sampleNO,sep=""),
+                      ifelse(model=="weibull","Weibull","Lognormal"), 
+                      paste("RSS:",round(rss,2),sep=""), 
+                      paste("FOM:",round(fom,2),sep="")), 
+                      col=c("grey50", "grey30", lineCol[seq(ncomp)],NA,NA,NA,NA), 
+                      pch=c(pch, rep(NA,ncomp+1),NA,NA,NA,NA),
+                      lty=c(NA, rep("solid",ncomp+1),NA,NA,NA,NA), 
+                      yjust=2, ncol=1, cex=1.5, pt.cex=2,
+                      bty="o", lwd=3.0, pt.bg="white")
+
+           } else {
+
+               legend(ifelse(mypos,"topleft","topright"),
+                      legend=c("Measured","Fitted", 
+                      paste("Comp.",seq(ncomp),sep=""),
+                      ifelse(model=="weibull","Weibull","Lognormal"), 
+                      paste("RSS:",round(rss,2),sep=""), 
+                      paste("FOM:",round(fom,2),sep="")), 
+                      col=c("grey50", "grey30", lineCol[seq(ncomp)],NA,NA,NA), 
+                      pch=c(pch, rep(NA,ncomp+1),NA,NA,NA),
+                      lty=c(NA, rep("solid",ncomp+1),NA,NA,NA), 
+                      yjust=2, ncol=1, cex=1.5, pt.cex=2,
+                      bty="o", lwd=3.0, pt.bg="white")
+
+           } # end if. 
+
+           ###
+           par(mar=c(4,5,1,0.5)+0.1)
+
+           ###
+           gxhtvcz1 <- normTEST$statistic
+           gxhtvcz2 <- normTEST$p.value
+
+           ###
+           hist(residuals, main=NULL, col="skyblue", xlab="Residuals", 
+                border="white", mgp=c(2.5,1,0), cex.axis=1.5, cex.lab=1.5)
+           box(lwd=2)
+
+           ###
+           legend("topleft",legend=c(paste("n: ",length(residuals),sep=""),
+                  paste("Mean: ",round(mean(residuals),3),sep=""), 
+                  paste("Sd: ",round(sd(residuals),3),sep=""),
+                  paste("Statistic: ",round(gxhtvcz1,2),sep=""), 
+                  paste("p-value: ",round(gxhtvcz2,3),sep="")), 
+                  yjust=2, ncol=1, cex=1, pt.cex=1, bty="n", 
+                  text.col="red")
+          
+           ###
+           hist(fom0vec, main=NULL, col="purple",border="white", xlab="FOM (%)", 
+                mgp=c(2.5,1,0), cex.axis=1.5, cex.lab=1.5)
+           box(lwd=2)
+
+           ###
+           legend("topright",legend=c(paste("N: ",acpt,sep=""), 
+                  paste("Min: ",round(min(fom0vec),2),sep=""),
+                  paste("Mean ",round(mean(fom0vec),2),sep=""),
+                  paste("Max: ",round(max(fom0vec),2),sep="")), 
+                  yjust=2, ncol=1, cex=1, pt.cex=1, bty="n",
+                  text.col="red")
+
+           ###
+           hist(rss0vec, main=NULL, col="red", border="white", xlab="RSS", 
+                mgp=c(2.5,1,0), cex.axis=1.5, cex.lab=1.5)
+           box(lwd=2)
+
+           ###
+           legend("topright",legend=c(paste("N: ",acpt,sep=""),
+                  paste("Min: ",round(min(rss0vec),2),sep=""),
+                  paste("Mean ",round(mean(rss0vec),2),sep=""),
+                  paste("Max: ",round(max(rss0vec),2),sep="")), 
+                  yjust=2, ncol=1, cex=1, pt.cex=1, bty="n",
+                  text.col="purple")
+
+      } else {
+
+           if (!is.null(sampleNO)) {
+
+               legend(ifelse(mypos,"topleft","topright"),
+                      legend=c("Measured", paste("NO:",sampleNO,sep=""), model), 
+                      col=c("grey50",NA,NA), pch=c(pch,NA,NA),lty=c(NA,NA,NA), 
+                      yjust=2, ncol=1, cex=1.5, pt.cex=2, bty="o", lwd=3.0, 
+                      pt.bg="white")
+
+           } else {
+
+               legend(ifelse(mypos,"topleft","topright"),
+                      legend=c("Measured", model), 
+                      col=c("grey50", NA), pch=c(pch, NA),lty=c(NA,NA), 
+                      yjust=2, ncol=1, cex=1.5, pt.cex=2, bty="o", lwd=3.0, 
+                      pt.bg="white")
+
+           } # end if.  
+
+           ###
+           par(mar=c(4,5,1,0.5)+0.1)
+           plot(1,1,type="n", xlab="Residuals", ylab="", mgp=c(2.5,1,0), 
+                cex.axis=1.5, cex.lab=1.5)
+           box(lwd=2)
+
+           ###
+           plot(1,1,type="n", xlab="FOM (%)", ylab="", mgp=c(2.5,1,0), 
+                cex.axis=1.5, cex.lab=1.5)
+           box(lwd=2)
+
+           ###
+           plot(1,1,type="n", xlab="RSS", ylab="", mgp=c(2.5,1,0), 
+                cex.axis=1.5, cex.lab=1.5)
+           box(lwd=2)
+
+      } # end if.
+
+  } # end function plot_ussGSD.
+  ###==========================================================================================================================
+  ###
+
+  ###
+  ###**************************************************************************************************************************
+  ### Function ussGSD() is used for performing the unmixing of a single-sample grain-size distribution. 
+  ###==========================================================================================================================
+  ### The function contains the following arguments.
+  ###
+  ###         gsl: A numeric vector containing the grain-size levels (in unit um). 
+  ###
+  ###         gsd: A nummeric vector cotaining the volume percentages (in unit %) of the 
+  ###              grain-size distribution. 
+  ###
+  ###       ncomp: An integer (from 1 to 13) indicating the number of components to be unmixed. 
+  ###
+  ###    expGSlev: A logical value indicating whether the grain-size level [gsl] is 
+  ###              of exponential scale.  
+  ###
+  ###        auto: A logical value indicating whether performing a automatic grain-size unmixing, 
+  ###              in this case the user needs not to specify the initials used for optimization.
+  ###
+  ###       model: A character indicating the model to be used, "weibull", or "lognormal".
+  ###
+  ###         mpd: An integer indicating the minimum distance (in indices) of peaks to be identified.
+  ###
+  ###         ctf: A numeric value (between -1 and 1) representing a critical threshold factor  
+  ###              that controls the identification of peaks from the grain-size distribution.  
+  ###              This argument can be used to prevent identifying a false peak characterized  
+  ###              by a large positive second-order derivative. Specially, ctf=0 indicates
+  ###              that peaks with second-order derivatives above zero will be precluded. 
+  ###              The precluding effect will be increasingly suppressed as ctf increases 
+  ###              from -1 to 1. 
+  ###
+  ###        ntry: An integer indicating the number of trials in a trial-and-error protocol. 
+  ###
+  ###         kkf: A numeric value controlling the range of values (sigma, or beta) from which    
+  ###              random starting parameters will be generated during the "trial-and-error" 
+  ###              protocol.
+  ###
+  ###   startPars: A two-row matrix containing starting parameters used for unmixing, the first
+  ###              row contains the modes of individual components, and the second row contains
+  ###              the alpha (Weibull distribution) or sigma (Lognormal distribution) value of 
+  ###              individual components.
+  ###
+  ###  alphaRange: A two-element vector indicating the lower and upper limits on alpha values of 
+  ###              a Weibull distribution generated from a Uniform distribution.
+  ###
+  ###  sigmaRange: A two-element vector indicating the lower and upper limits on sigma values 
+  ###              of a Lognormal distribution generated from a Uniform distribution.
+  ###
+  ###    useIndex: A logical value indicating whether the index of a grain-size level will be  
+  ###              used as the x-coordinate during the unmixing process.
+  ###
+  ###     minfunc: A character indicating the objective to be mimimized, either "fom" or "rss",
+  ###              for the figure-of-merit value or the residual sum of squares, respectively.
+  ###
+  ###        trim: A logical value indicating whether the unmixing results will be trimed  
+  ###              using a recursive optimization protocol.
+  ###
+  ###        mrsl: A numeric value indicating the minimum resolution between two adjacent     
+  ###              components used to trim the unmixing results, which ranges from 0.1 to 1. 
+  ###
+  ###viewAutoInis: A logical value indicating whether the automatically generated initial values 
+  ###              will be visualized.
+  ###
+  ###      viewLM: A logical value indicating whether the optimization using the Levenberg-Marquardt
+  ###              nonlinear least-squares algorithm will be output onto the screen.
+  ###
+  ###     viewFit: A logical value indicating whether the trial-and-error unmixing results 
+  ###              will be visualized in a plot.
+  ###
+  ###     outfile: A character indicating the name of the returned CSV file containing the unmixing results 
+  ###              of individual components. The CSV file will be saved in the current working directory.
+  ###
+  ###      rmZero: A logical value indicating whether zero volume percentages will be removed.
+  ###
+  ###        plot: A logical value indicating whether the unmixing result will be visualized in a plot.
+  ###
+  ###    sampleNO: An integer indicating the ID number of the grain-size distribution.
+  ### 
+  ###       addvl: A logical value indicating whether vertical lines will be added      
+  ###              to the plot showing the unmixed grain-size components. 
+  ###
+  ###       logxy: A character indicating whether the x- or y-axis will be logged in the plot,  
+  ###              one of "", "x", "y", "xy", or NULL.  
+  ###
+  ###         lwd: A numeric value giving the widths of lines in the plot.
+  ###       
+  ###         pch: An integer giving the type of symbols in the plot.
+  ### 
+  ###         cex: A numeric value giving the size of symbols in the plot.
+  ###==========================================================================================================================
+  ### The function returns an invisible list of S3 object of class "ussgsd" containing the following elements.
+  ###
+  ###      model: A character indicating the model used for unmixing.
+  ###
+  ###      ncomp: An integer indicating the number of components used for unmixing.
+  ###
+  ###   expGSlev: A logical value indicating whether the grain-size level[gsl] is measured in exponential scale.  
+  ###
+  ### reserveidx: An integer vector indicating the indices of grain-size data points used for plotting.
+  ###  
+  ###   fit.data: A two-column matrix containing the data used for unmixing.
+  ###
+  ###   fit.pars: A matrix containing the optimized parameters of the distribution function. 
+  ###
+  ###   normTest: A list containing the results of normality test of residuals.
+  ###
+  ###       FOMs: A numeric vector containing the figure-of-merit values generated   
+  ###             during the trial-and-error protocol.
+  ###
+  ###       RSSs: A numeric vector containing the residual sum of squares generated 
+  ###             during the trial-and-error protocol.
+  ###
+  ###       acpt: An integer indicating the number of accpeted trials.
+  ###
+  ###    gs.comp: A matrix containing the grain-size levels, the measured volume percentages, the predicted 
+  ###             volume percentages, and the unmixed volume percentages of individual components.
+  ###    
+  ###       mdxv: A numeric vector containing the peak locations of individual components.
+  ###
+  ###       mdyv: A numeric vector containing the peak volume percentages (i.e., the heights of  
+  ###             the maximum amplitude)of individual components.
+  ###
+  ###  residuals: A numeric vector containing the unmixing residuals.
+  ###
+  ###    gs.pars: A matrix containing the optimized parameters of the grain-size distrubtion, including
+  ###             the proportions, means, meadians, modes, and standard deviations of individual components.
+  ###
+  ###         sp: A matrix containing the shape parameters of unmixed individual grain-size components,
+  ###             [x1] the indice corresponding to the half volume percentage of a component (left side),
+  ###             [x2] the indice corresponding to the half volume percentage of a component (right side),
+  ###             [xm] the indice corresponding to the max volume percentage of a component,
+  ###             [d1] the half-width at the left side of a component,
+  ###             [d2] the half-width at the right side of a component,
+  ###             [thw] the total half-width of a component, 
+  ###             [sf] the symmetry factors of a component.
+  ###
+  ### resolution: A numeric vector containing the resolutions between two adjacent components.
+  ###
+  ###     deltaH: A numberic vector containing the difference in entropy before and after 
+  ###             mixing between two adjacent components.
+  ###
+  ###        FOM: A numeric value indicating the optimal figure-of-merit value.
+  ###
+  ###        RSS: A numeric value indicating the optimal residual sum of squares.
+  ###   
+  ###         R2: A numeric value indicating the optimal R2 statistic.
+  ###
+  ###        RSE: A numeric value indicating the optimal residual standard error. 
+  ###==========================================================================================================================
+  ### In addition, the function automatically generates a plot showing the 
+  ### unmixing results produced by function plot_ussGSD() if plot=TRUE.
+  ###==========================================================================================================================
+  ussGSD <- function(gsl, gsd, ncomp=NULL, expGSlev=NULL, auto=FALSE, model="weibull", mpd=6, ctf=0.1,  
+                     ntry=100, kkf=0.1, startPars=NULL, alphaRange=NULL, sigmaRange=NULL, useIndex=TRUE,  
+                     minfunc="fom", trim=FALSE, mrsl=0.6, viewAutoInis=TRUE, viewLM=FALSE, viewFit=FALSE,    
+                     outfile=NULL, rmZero=TRUE, plot=TRUE, sampleNO=NULL, addvl=TRUE, logxy="x", lwd=3, 
+                     pch=21, cex=2) {
+
+        ###
+        stopifnot(length(gsl)==length(gsd),
+                  is.null(ncomp) || (length(ncomp)==1 && is.numeric(ncomp) && ncomp %in% 1:13),
+                  is.null(expGSlev) || (is.logical(expGSlev) && length(expGSlev)==1),
+                  is.logical(auto), length(auto)==1,
+                  is.character(model), length(model)==1, model %in% c("weibull","lognormal"),
+                  is.numeric(mpd), length(mpd)==1, mpd>0,
+                  is.numeric(ctf), length(ctf)==1, ctf>=-1, ctf<=1,
+                  is.numeric(ntry), length(ntry)==1, ntry>=2, 
+                  is.numeric(kkf), length(kkf)==1, kkf>0, kkf<1,
+                  is.null(startPars) || (is.matrix(startPars) && nrow(startPars)==2), 
+                  is.null(alphaRange) || (is.numeric(alphaRange) && length(alphaRange)==2),
+                  is.null(sigmaRange) || (is.numeric(sigmaRange) && length(sigmaRange)==2),
+                  is.logical(useIndex), length(useIndex)==1,
+                  is.character(minfunc), length(minfunc)==1, minfunc %in% c("fom", "rss"),
+                  is.logical(trim), length(trim)==1,
+                  is.numeric(mrsl), length(mrsl)==1, mrsl>0.1, mrsl<1, 
+                  is.logical(viewAutoInis), length(viewAutoInis)==1, 
+                  is.logical(viewLM), length(viewLM)==1, 
+                  is.logical(viewFit), length(viewFit)==1,
+                  is.null(outfile) || (is.character(outfile) && length(outfile)==1),
+                  is.logical(rmZero), length(rmZero)==1,  
+                  is.logical(plot), length(plot)==1,
+                  is.null(sampleNO) || (is.numeric(sampleNO) && length(sampleNO)==1), 
+                  is.logical(addvl), length(addvl)==1, 
+                  is.character(logxy), length(logxy)==1,
+                  is.numeric(lwd), length(lwd)==1, 
+                  is.numeric(pch), length(pch)==1,
+                  is.numeric(cex), length(cex)==1)
+
+        ###
+        origin_xd <- as.numeric(gsl)
+        yd <- as.numeric(gsd)
+
+        ###
+        if (any(!is.finite(origin_xd))) 
+            stop("Error: argument [gsl] contains non-finite value!")
+        if (any(!is.finite(yd))) 
+            stop("Error: argument [gsd] contains non-finite value!")
+
+        ###
+        if (is.null(expGSlev)) {
+
+            xd0xd0 <- round(diff(log(as.numeric(origin_xd))),3)
+            expGSlev <- ifelse(all(xd0xd0==xd0xd0[1]), TRUE, FALSE)
+
+        } # end if.
+
+        ###
+        nd <- length(yd)     
+
+        ###
+        if (useIndex==TRUE) {
+
+            xd <- seq(origin_xd)
+
+            ###
+            if(expGSlev==TRUE) {
+
+                xd1 <- log(origin_xd)      
+
+            } else {
+ 
+                xd1 <- origin_xd 
+
+            } # end if.
+
+            ### Build a relationship between xd and xd1.
+            ###-----------------------------------------
+            pab <- as.numeric(lm(xd1~xd)$coefficients)
+
+        } else {
+
+            xd <- origin_xd
+
+        } # end if.
+
+        ###
+        MINX <- min(xd)
+        MAXX <- max(xd)
+
+        ###
+        if (rmZero==TRUE) {
+
+           reserveidx <- which(yd>1e-5*max(yd))
+
+        } else {
+
+           reserveidx <- seq(nd)
+
+        } # end if.
+
+        ###
+        if (is.null(alphaRange))  { 
+
+            alphaRange <- if (useIndex==TRUE) c(6,30) else c(2,10)
+
+        } # end if.
+
+        if (is.null(sigmaRange))  {
+
+            sigmaRange <- if (useIndex==TRUE) c(0.01,0.2) else c(0.1,1)
+
+        } # end if.
+
+        ###
+        myTK <- c(0.1,0.2,0.5,1,2,5,10,20,50,100,200,500,1000,2000)
+        myLB <- c("0.1","0.2","0.5","1","2","5","10","20","50",
+                  "100","200","500","1000","2000")
+
+        ###
+        boolean1 <- is.null(startPars)
+        boolean2 <- is.null(ncomp) && auto==FALSE
+        boolean3 <- auto==TRUE && viewAutoInis==TRUE
+        boolean4 <- auto==FALSE
+        boolean5 <- viewFit==TRUE
+
+        ###
+        if ( (boolean1 && (boolean2 || (boolean3 || boolean4))) || boolean5) {
+
+            oldpar <- par("mar", "mfrow", "bg", "new")
+            on.exit(par(oldpar))
+
+        } # end if. 
+
+        ###
+        if (is.null(startPars)) {
+
+            ###
+            ### Find the modes of peaks from the 
+            ### second-order derivatives of the GSD.
+            ###-----------------------------------------------
+            d2y <- tgcd::savgol(yd, drv=2, hwd=4, pod=2)
+
+            ###
+            reserveidx0 <- which(abs(d2y)>1e-4*max(d2y)) 
+
+            ###
+            peakIDX <- pracma::findpeaks(x=-d2y[reserveidx0], 
+                minpeakdistance=mpd, sortstr=TRUE)
+
+            ###
+            CTFV <- ctf*min(-d2y[reserveidx0])
+
+            ###
+            peakIDX <- peakIDX[peakIDX[,1]>CTFV,,drop=FALSE]
+
+            ###
+            if(nrow(peakIDX)==0) {
+
+                mat <- cbind(origin_xd, yd)
+                rownames(mat) <- NULL
+                colnames(mat) <- c("GSlev","Volume")
+
+                ###
+                output <- list("model"=model, "ncomp"=ncomp, "expGSlev"=expGSlev, 
+                               "reserveidx"=reserveidx, "gs.comp"=mat)
+                class(output) <- "ussgsd"
+
+                ###
+                if (plot==TRUE) {
+
+                    plot_ussGSD(output, sampleNO=sampleNO, addvl=addvl, 
+                                lwd=lwd, cex=cex, pch=pch)
+
+                } # end if.
+
+                ###
+                cat("Note: no component can be identified from the GSD!\n")
+
+                ###
+                return(invisible(output))
+
+            } # end if.
+            ###
+
+            ###
+            mdgs0 <- origin_xd[reserveidx0][peakIDX[,2]]
+            mdgsy0 <- d2y[reserveidx0][peakIDX[,2]]
+
+            ###
+            if (is.null(ncomp) && auto==FALSE) {
+
+                plot(origin_xd[reserveidx0], d2y[reserveidx0], type="n", 
+                     xlab="Grain size (um)", ylab="Second-order derivative of GSD",
+                     mgp=c(2.5,1,0), log="x", cex.axis=1.2, cex.lab=1.5, xaxt="n", cex.main=1.5,
+                     main=paste("Identified ", length(mdgs0), " potential components",sep=""))
+
+                ###
+                box(lwd=2)
+
+                ###
+                axis(side=1, at=myTK, labels=myLB, cex.axis=1.2)
+                points(origin_xd[reserveidx0], d2y[reserveidx0], type="l", col="purple", lwd=4)
+            
+                ###         
+                abline(h=-CTFV, col="black", lty=2, lwd=4)
+                abline(v=mdgs0, col="grey70", lty=1, lwd=6)
+
+                ###
+                par("new"=TRUE)
+                plot(origin_xd[reserveidx0], yd[reserveidx0], log="x", type="l", 
+                     col="red", lwd=4, lty=3, xlab="", ylab="", xaxt="n", yaxt="n")
+
+                ###
+                ncomp <- as.numeric(readline(
+                    paste("Please enter the number of components (i.e., [ncomp]): ")))
+
+            } # end if. 
+
+            ###
+            if (auto==TRUE) {
+
+                ### An automatic pattern.
+                mdgs <- mdgs0
+                mdgsy <- mdgsy0
+
+                ###
+                Nmdgs <- length(mdgs)
+
+                ###
+                if (is.null(ncomp)) {
+
+                    ncomp <- Nmdgs
+
+                } else {
+
+                    if (ncomp>Nmdgs) {
+
+                        cat("Note: [ncomp=",ncomp,"] exceeds the number of ", 
+                            "automatically identified peaks(k=", Nmdgs,")!\n",sep="")
+
+                        ###
+                        ncomp <- Nmdgs
+
+                    } # end if. 
+
+                } # end if. 
+
+                ###
+                if (viewAutoInis==TRUE) {
+
+                    plot(origin_xd[reserveidx0], d2y[reserveidx0], type="n", 
+                         xlab="Grain size (um)", ylab="Second-order derivative of GSD", 
+                         mgp=c(2.5,1,0), log="x", cex.axis=1.2, cex.lab=1.5, xaxt="n", cex.main=1.5, 
+                         main=paste("Number of components: ",ncomp, " out of ",Nmdgs, sep=""))
+
+                    ###
+                    box(lwd=2)
+
+                    ###
+                    axis(side=1, at=myTK, labels=myLB, cex.axis=1.2)
+                    points(origin_xd[reserveidx0], d2y[reserveidx0], type="l", col="purple", lwd=4)
+  
+                    ###
+                    abline(h=-CTFV, col="black", lty=2, lwd=4)
+                    abline(v=mdgs, col="grey70", lty=1, lwd=6)
+    
+                    ###
+                    abline(v=mdgs[1:ncomp], lwd=4, col="skyblue")
+                    points(x=mdgs[1:ncomp], y=mdgsy[1:ncomp], pch=23, bg="red", col="red", cex=1.6) 
+                    text(x=mdgs[1:ncomp], y=mdgsy[1:ncomp], labels=paste("C",1:ncomp,sep=""), 
+                         col="red", cex=1.2)
+
+                    ###
+                    par("new"=TRUE)
+                    plot(origin_xd[reserveidx0], yd[reserveidx0], log="x", type="l", 
+                         col="red", lwd=3, lty=3, xlab="", ylab="", xaxt="n", yaxt="n")
+
+                } # end if. 
+
+            } else {
+
+                ### An interactive pattern.
+                ###------------------------
+                mdgs <- mdgsy <- vector(length=ncomp)
+
+                ###
+                for (i in 1:ncomp) {
+
+                    plot(origin_xd[reserveidx0], d2y[reserveidx0], type="n", 
+                         xlab="Grain size (um)", ylab="Second-order derivative of GSD", 
+                         mgp=c(2.5,1,0), log="x", cex.axis=1.2, cex.lab=1.5, xaxt="n", cex.main=1.5, 
+                         main=paste("Number of components: ",i-1, " out of ",ncomp, sep=""))
+
+                    ###
+                    box(lwd=2)
+
+                    ###
+                    axis(side=1, at=myTK, labels=myLB, cex.axis=1.2)
+                    points(origin_xd[reserveidx0], d2y[reserveidx0], type="l", col="purple", lwd=4)
+           
+                    ###
+                    abline(h=-CTFV, col="black", lty=2, lwd=4)
+                    abline(v=mdgs0, col="grey70", lty=1, lwd=6)
+
+                    ###
+                    par("new"=TRUE)
+                    plot(origin_xd[reserveidx0], yd[reserveidx0], log="x", type="l", 
+                         col="red", lwd=4, lty=3, xlab="", ylab="", xaxt="n", yaxt="n")
+
+                    ###
+                    if (i>1)  { 
+
+                        abline(v=mdgs[1:(i-1)], lwd=3, col="skyblue") 
+                        points(x=mdgs[1:(i-1)], y=mdgsy[1:(i-1)], pch=23, bg="red", col="red", cex=1.5)
+                        text(x=mdgs[1:(i-1)], y=mdgsy[1:(i-1)], labels=paste("C",1:(i-1),sep=""), 
+                             col="red", cex=1.2)
+
+                    } # end if.
+     
+                    ###
+                    LLL <- try(locator(n=1), silent=TRUE)
+                    if (class(LLL)=="try-error") 
+                        stop("Failed in parameter initialisation by clicking!")
+
+                    ###
+                    mdgs[i] <- LLL$x
+                    mdgsy[i] <- LLL$y
+            
+                } # end for.
+
+                ###
+                apxvy <- approx(x=origin_xd[reserveidx0],y=-d2y[reserveidx0],xout=mdgs)$y
+                odapxvy <- order(apxvy, decreasing=TRUE)
+
+                ###
+                mdgs <- mdgs[odapxvy]
+                mdgsy <- mdgsy[odapxvy]
+
+                ###
+                plot(origin_xd[reserveidx0], d2y[reserveidx0], type="n", 
+                    xlab="Grain size (um)", ylab="Second-order derivative of GSD", 
+                    mgp=c(2.5,1,0), log="x", cex.axis=1.2, cex.lab=1.5, xaxt="n", cex.main=1.5, 
+                    main=paste("Number of components: ",ncomp, " out of ",ncomp, sep=""))
+
+                ###
+                box(lwd=2)
+
+                ###
+                axis(side=1, at=myTK, labels=myLB, cex.axis=1.2)
+                points(origin_xd[reserveidx0], d2y[reserveidx0], type="l", col="purple", lwd=4)
+  
+                ###
+                abline(h=-CTFV, col="black", lty=2, lwd=4)
+                abline(v=mdgs, col="grey70", lty=1, lwd=6)
+                abline(v=mdgs, lwd=3, col="skyblue") 
+
+                ###
+                par("new"=TRUE)
+                plot(origin_xd[reserveidx0], yd[reserveidx0], log="x", type="l", 
+                     col="red", lwd=4, lty=3, xlab="", ylab="", xaxt="n", yaxt="n")
+
+                ###
+                points(x=mdgs, y=mdgsy, pch=23, bg="red", col="red", cex=1.5)
+                text(x=mdgs, y=mdgsy, labels=paste("C",(1:ncomp),sep=""), col="red", cex=1.2)
+
+            } # end if.
+
+        } else {
+
+            if (is.null(ncomp)) { 
+
+                ncomp <- ncol(startPars)
+
+            } else {
+
+                if (ncomp!=ncol(startPars)) 
+                    stop("Error: [ncomp] must be equal to the number of columns of [startPars]!")
+
+            } # end if.
+
+            ###
+            mdgs <- startPars[1,,drop=TRUE]    
+
+        } # end if.  
+
+        ###
+        ### Change the scale of mdgs.
+        ###--------------------------
+        if (useIndex==TRUE) {
+
+            if (expGSlev==TRUE) {
+
+                mdgs <- (log(mdgs)-pab[1])/pab[2]
+
+            } else {
+
+                mdgs <- (mdgs-pab[1])/pab[2]
+
+            } # end if.
+
+        } # end if.
+
+        ###
+        ### The function to be minimised.
+        ###---------------------------------------------------
+        minfn <- function(p, xd, yd, mdgs, model, minfunc)  {
+
+             nd <- length(xd)
+
+             ###
+             hg <- rep(.Machine$double.xmax, nd)
+             if (any(!is.finite(p)))  return(hg)
+
+             ###
+             ncomp <- length(p)/2
+
+             ###
+             if (model=="weibull") {
+ 
+                 beta <- abs(p[1:ncomp]) + 1
+
+                 ###
+                 Mode <- abs(p[(ncomp+1):(2*ncomp)])
+
+                 ###
+                 for (i in 1:ncomp) {
+
+                     if (Mode[i]<(1-kkf)*mdgs[i]) Mode[i]<- (1-kkf)*mdgs[i]
+                     if (Mode[i]>(1+kkf)*mdgs[i]) Mode[i]<- (1+kkf)*mdgs[i]
+
+                 } # end for.
+
+                 ###
+                 theta <- Mode/((beta-1.0)/beta)^(1.0/beta) 
+
+                 ###
+                 mat <- matrix(nrow=nd, ncol=ncomp)
+
+                 ###
+                 for (i in 1:ncomp)  {
+
+                     mat[,i] <- (beta[i]/theta[i])*
+                                ((xd/theta[i])^(beta[i]-1.0))*
+                                exp(-(xd/theta[i])^beta[i])
+
+                 } # end for. 
+
+             } else if (model=="lognormal") {
+
+                 beta <- abs(p[1:ncomp]) + 0.001
+
+                 ###
+                 Mode <- abs(p[(ncomp+1):(2*ncomp)])
+
+                 ###
+                 for (i in 1:ncomp) {
+
+                     if (Mode[i]<(1-kkf)*mdgs[i]) Mode[i]<- (1-kkf)*mdgs[i]
+                     if (Mode[i]>(1+kkf)*mdgs[i]) Mode[i]<- (1+kkf)*mdgs[i]
+
+                 } # end for.
+
+                 ###
+                 theta <- log(Mode)+beta^2
+
+                 ###
+                 mat <- matrix(nrow=nd, ncol=ncomp)
+
+                 ###
+                 for (i in 1:ncomp)  {
+
+                     mat[,i] <- 1/sqrt(2*pi)/beta[i]/xd*
+                                exp(-0.5*((log(xd)-theta[i])/beta[i])^2)
+
+                 } # end for. 
+
+             } # end if.
+             ### 
+
+             ### Calculate abundances using a linear algebra method.
+             ###----------------------------------------------------
+             coef <- try(solve(a=t(mat)%*%mat, b=t(mat)%*%as.matrix(yd)), silent=TRUE)
+
+             ###
+             if (class(coef)=="try-error" || any(!is.finite(coef)) || any(coef<0)) return(hg) 
+ 
+             ###
+             coef <- as.numeric(coef)
+
+             ###
+             mat <- matrix(nrow=nd, ncol=ncomp)
+ 
+             for (i in 1:ncomp)   { 
+
+                 if (model=="weibull") {
+
+                     mat[,i] <- coef[i]*(beta[i]/theta[i])*
+                               ((xd/theta[i])^(beta[i]-1.0))*
+                                exp(-(xd/theta[i])^beta[i])
+
+                 } else if (model=="lognormal") {
+
+                     mat[,i] <- coef[i]/sqrt(2*pi)/beta[i]/xd*
+                                exp(-0.5*((log(xd)-theta[i])/beta[i])^2)
+
+                 } # end if. 
+
+             } # end for.
+
+             ###
+             if (all(is.finite(mat))) {
+
+                 yd_fit <- rowSums(mat)
+              
+                 ### The objective to be minimised.
+                 ###------------------------------ 
+                 if (minfunc=="fom") {
+
+                     rsdlv <- sqrt(abs(yd-yd_fit)/sum(yd_fit))
+
+                 } else if (minfunc=="rss") {
+
+                     rsdlv <- yd-yd_fit
+
+                 } # end if. 
+
+                 ###
+                 return(rsdlv)
+ 
+             } else {
+ 
+                 return(hg) 
+
+             } # end if. 
+
+       } # end function minfn.
+       ###
+       ###--------------------------------------------------------------------------------
+       ### Calculate shape parameters of grain-size components.
+       ###-----------------------------------------------------
+       calShape <- function(y, x)  {
+           
+           ny <- length(y)
+           maxloc <- which.max(y)
+           hmaxval <- max(y)/2
+           Tm <- x[maxloc]
+           
+           ###
+           T1 <- suppressWarnings(try(approx(x=y[1L:maxloc], y=x[1L:maxloc], 
+                                      xout=hmaxval)$y, silent=TRUE))
+           T2 <- suppressWarnings(try(approx(x=y[maxloc:ny], y=x[maxloc:ny], 
+                                      xout=hmaxval)$y, silent=TRUE))
+
+           ###
+           if (class(T1)!="try-error") { d1 <- Tm-T1 } else { T1 <- d1 <- NA } # end if.
+           ###
+           if (class(T2)!="try-error") { d2 <- T2-Tm } else { T2 <- d2 <- NA } # end if. 
+ 
+           ###          
+           thw <- T2-T1
+           sf <- d2/thw
+
+           ###         
+           return(c("x1"=T1, "x2"=T2, "xm"=Tm, "d1"=d1, "d2"=d2, "thw"=thw, "sf"=sf))
+
+       } # end function calShape.
+       ###--------------------------------------------------------------------------------
+
+       ###
+       lineCol <- c("deepskyblue", "orangered", "purple",   "violetred", 
+                    "yellowgreen", "lightblue",  "goldenrod", "forestgreen", 
+                    "blue",  "plum", "tan", "violet", "grey50") 
+
+       ###
+       gdcp <- 0
+       minobj <- .Machine$double.xmax
+       acpt <- 0
+
+       ###
+       if (viewLM==FALSE) {
+
+           cat(paste("ncomp=",ncomp, ", model=", model, ", ntry=", ntry, ".\n", sep="")) 
+           cat("Unmixing of single-sample Grain-Size Distribution (ussGSD)",
+               " is in progress, please wait, ...\n", sep="") 
+
+           ###
+           pb <- txtProgressBar(min=1, max=ntry, initial=1, style=1)
+
+       } # end if. 
+
+       ###
+       fom0vec <- rss0vec <- c()
+       ### Implement a trial-and-error protocol.
+       ###---------------------------------------------------------------------------------
+       for (i in seq(ntry))  {
+
+           p0 <- vector(length=2*ncomp)
+
+           ###
+           if (is.null(startPars)) {
+
+               if (model=="weibull") {
+               
+                   ### Simulate random alpha values.
+                   ###-----------------------------
+                   p0[1:ncomp] <- runif(n=ncomp, min=alphaRange[1], max=alphaRange[2])
+
+               } else if (model=="lognormal") {
+
+                   ### Simulate random sigma values.
+                   ###------------------------------
+                   p0[1:ncomp] <- exp(runif(n=ncomp, min=log(sigmaRange[1]), max=log(sigmaRange[2])))
+
+               } # end if.
+
+           } else {
+
+               parsROW2 <- startPars[2,,drop=TRUE]
+
+               ###
+               p0[1:ncomp] <- runif(n=ncomp, min=(1-kkf)*parsROW2, max=(1+kkf)*parsROW2)
+
+           } # end if.
+ 
+           ###
+           p0[(ncomp+1):(2*ncomp)] <- runif(n=ncomp, min=(1-kkf)*mdgs[1:ncomp], max=(1+kkf)*mdgs[1:ncomp])
+     
+           ### Parameter optimisation using the Levenberg-Marquardt algorithm.
+           ###----------------------------------------------------------------
+           optLM <- try(minpack.lm::nls.lm(par=p0, lower=NULL, upper=NULL, fn=minfn, jac=NULL, 
+                        control=nls.lm.control(maxiter=1024), xd, yd, mdgs, model, minfunc), 
+                        silent=TRUE)
+           ###
+           if (viewLM==TRUE) print(optLM)
+
+           ###
+           if (class(optLM)!="try-error") {
+
+               p <- optLM$par
+
+               ###
+               if (model=="weibull") {
+
+                   beta0 <- abs(p[1:ncomp]) + 1
+
+                   ###
+                   Mode0 <- abs(p[(ncomp+1):(2*ncomp)])
+
+                   ###
+                   theta0 <- Mode0/((beta0-1.0)/beta0)^(1.0/beta0) 
+    
+                   ###
+                   mat0 <- matrix(nrow=nd, ncol=ncomp)
+
+                   ###
+                   for (ii in 1:ncomp)  {
+
+                       mat0[,ii] <- (beta0[ii]/theta0[ii])*
+                                    ((xd/theta0[ii])^(beta0[ii]-1.0))*
+                                     exp(-(xd/theta0[ii])^beta0[ii])
+
+                   } # end for.
+
+                   ###
+                   Mean0 <- theta0*gamma(1+1/beta0)
+
+                   ###
+                   Median0 <- theta0*(log(2))^(1/beta0)  
+
+               } else if (model=="lognormal") {
+
+                   beta0 <- abs(p[1:ncomp]) + 0.001
+
+                   ###
+                   Mode0 <- abs(p[(ncomp+1):(2*ncomp)])
+
+                   ###
+                   theta0 <- log(Mode0)+beta0^2
+    
+                   ###
+                   mat0 <- matrix(nrow=nd, ncol=ncomp)
+
+                   ###
+                   for (ii in 1:ncomp)  {
+
+                       mat0[,ii] <- 1/sqrt(2*pi)/beta0[ii]/xd*
+                                    exp(-0.5*((log(xd)-theta0[ii])/beta0[ii])^2)
+
+                   } # end for.
+
+                   ###
+                   Mean0 <- exp(theta0+0.5*beta0^2)
+
+                   ###
+                   Median0 <- exp(theta0)
+
+               } # end if.
+
+               ###
+               coef0 <- try(solve(a=t(mat0)%*%mat0, b=t(mat0)%*%as.matrix(yd)), silent=TRUE)
+
+               ### Accept the unmixing results of the "trial-and-error" protocol 
+               ### if the following conditions are satisfied.
+               ###------------------------------------------------------------------
+               OOKK <- class(coef0)!="try-error" && all(is.finite(coef0)) && 
+                       all(coef0>0) &&  all(is.finite(beta0)) && all(is.finite(theta0)) && 
+                       all(is.finite(Mean0))  && all(Mean0>MINX & Mean0<MAXX) &&
+                       all(is.finite(Median0)) && all(Median0>MINX & Median0<MAXX) && 
+                       all(is.finite(Mode0)) && all(Mode0>MINX & Mode0<MAXX)  
+
+               ###
+               if (OOKK==TRUE)  {
+
+                   acpt <- acpt + 1
+
+                   ###
+                   coef0 <- as.numeric(coef0)
+
+                   ###
+                   for (ii in 1:ncomp)  mat0[,ii] <- coef0[ii]*mat0[,ii]
+
+                   ###
+                   yd_fit0 <- rowSums(mat0)
+                   fom0 <- sum(abs(yd-yd_fit0))/sum(yd_fit0)*100
+                   rss0 <- sum((yd-yd_fit0)^2)
+
+                   ###
+                   fom0vec <- c(fom0vec, fom0)
+                   rss0vec <- c(rss0vec, rss0)
+
+                   ### Visualise the unmixing results of the "trial-and-error" protocol.
+                   ###------------------------------------------------------------------ 
+                   if (viewFit==TRUE) {
+
+                       mat_vfp <- mat0
+                       mat_vfp <- mat_vfp[,order(Mode0),drop=FALSE] 
+
+                       ###
+                       par(mar=c(6,6,5,5)+0.1)
+
+                       ###
+                       plot(origin_xd[reserveidx], yd[reserveidx], type="n", cex.lab=1.5, 
+                            log="x", cex.axis=1.5, mgp=c(2.5, 1, 0), xlab="Grain size (um)", 
+                            ylab="Volume percentage (%)", xaxt="n")
+
+                       ###
+                       box(lwd=2)
+
+                       ###
+                       XaxisCentral <- median(axTicks(side=1))
+
+                       ###
+                       axis(side=1, at=myTK, labels=myLB, cex.axis=1.5)
+
+                       ###
+                       points(origin_xd[reserveidx], yd[reserveidx], type="p",     
+                              lwd=2, pch=21, col="gray50", cex=1.5) 
+
+                       ###
+                       points(origin_xd, rowSums(mat_vfp), col="grey30", type="l", lwd=3.0)
+
+                       ###
+                       for (ii in 1:ncomp) {
+
+                           points(origin_xd, mat_vfp[,ii], col=lineCol[ii], type="l", lwd=3)
+                       
+                       } # end for.
+                          
+                       ###
+                       mypos <- mean(yd[reserveidx][origin_xd[reserveidx]<=XaxisCentral])<
+                                mean(yd[reserveidx][origin_xd[reserveidx]>XaxisCentral]) 
+
+                       ###
+                       legend(ifelse(mypos,"topleft","topright"),
+                              legend=c("Measured","Fitted", paste("Comp.",seq(ncomp),sep=""),
+                              paste("Count:",acpt,sep=""), paste("RSS:",round(rss0,2),sep=""), 
+                              paste("FOM:",round(fom0,2),sep="")), 
+                              col=c("grey50", "grey30", lineCol[seq(ncomp)],NA,NA,NA), 
+                              pch=c(21, rep(NA,ncomp+1),NA,NA,NA), 
+                              lty=c(NA, rep("solid",ncomp+1),NA,NA,NA), 
+                              yjust=2, ncol=1, cex=1, pt.cex=1, bty="o", 
+                              lwd=3.0, pt.bg="white")
+
+                   } # end if. 
+
+                   ###
+                   vxfght <- ifelse(minfunc=="fom", fom0, rss0)            
+
+                   ### Update the optimal results.
+                   if (vxfght<minobj) {
+
+                       beta <- beta0               
+                       theta <- theta0
+                       coef <- coef0
+
+                       ###
+                       Mean <- Mean0
+                       Median <- Median0
+                       Mode <- Mode0
+
+                       ###
+                       mat <- mat0
+                       minobj <- vxfght 
+                      
+                       ###
+                       gdcp <- 1 
+                       
+                   } # end if.
+
+               } # end if.
+
+           } # end if.
+
+           ###
+           if (viewLM==FALSE) setTxtProgressBar(pb, i)
+
+       } # end for.
+       ###---------------------------------------------------------------------------------
+    
+       ###
+       if (viewLM==FALSE) close(pb) 
+
+       ###
+       if (gdcp==0) {
+
+           mat <- cbind(origin_xd, yd)
+           rownames(mat) <- NULL
+           colnames(mat) <- c("GSlev","Volume")
+
+           ###
+           output <- list("model"=model, "ncomp"=ncomp, "expGSlev"=expGSlev, 
+                          "reserveidx"=reserveidx, "gs.comp"=mat)
+           class(output) <- "ussgsd"
+
+           ###
+           if (plot==TRUE) {
+
+               plot_ussGSD(output, sampleNO=sampleNO, addvl=addvl, 
+                           lwd=lwd, cex=cex, pch=pch)
+
+           } # end if.
+
+           ###
+           return(invisible(output))
+
+       } # end if.
+
+       ###
+       Np <- 3*ncomp
+       yd_fit <- rowSums(mat)
+       residuals <- yd-yd_fit
+       fom <- sum(abs(yd-yd_fit))/sum(yd_fit)*100
+       rss <- sum((yd-yd_fit)^2)
+       sst <- sum((yd-mean(yd))^2)
+       R2 <- 1 - rss/sst
+       RSE <- sqrt(rss/(nd-Np))
+       
+       ###
+       prop <- coef/sum(coef)*100
+
+       ###
+       gs.pars <- cbind(prop, Mean, Median, Mode)
+       oidx <- order(gs.pars[,4])
+       gs.pars <- gs.pars[oidx,,drop=FALSE]
+
+       ###
+       mat <- mat[,oidx,drop=FALSE]
+       sp <- t(apply(mat, MARGIN=2L, calShape, seq(xd)))
+       rownames(sp) <- paste("Comp.", seq(ncomp), sep="")
+
+       ###
+       if (ncomp>1) {
+
+           resolvec <- name_resolvec <- vector(length=ncomp-1) 
+           deltaHvec <- name_deltaHvec <- vector(length=ncomp-1)
+
+           ###
+           for (i in seq(ncomp-1)) {
+
+               resolvec[i] <- (sp[i+1,3]-sp[i,3])/(sp[i,5]+sp[i+1,4])
+               name_resolvec[i] <- paste("Comp.",i,".",i+1L,sep="")
+
+               ###
+               px12idx <- mat[,i]>0 & mat[,i+1]>0
+               px1 <- mat[px12idx,i]/sum(mat[px12idx,i])
+               px2 <- mat[px12idx,i+1]/sum(mat[px12idx,i+1])
+               px12 <- px1 + px2
+       
+               ###
+               deltaHvec[i] <- (-sum(px12*log2(px12))) - 
+                   (-sum(px1*log2(px1))) - (-sum(px2*log2(px2)))
+               name_deltaHvec[i] <- paste("Comp.",i,".",i+1L,sep="")
+
+           } # end for.
+
+           ###
+           names(resolvec) <- name_resolvec
+           names(deltaHvec) <- name_deltaHvec
+
+       } else {
+
+           resolvec <- deltaHvec <- Inf
+
+       } # end if.
+ 
+       ###
+       fit.data <- cbind(xd,yd)
+       rownames(fit.data) <- colnames(fit.data) <- NULL
+       ###
+
+       ###
+       if (model=="weibull") {
+
+           SDp <- sqrt( theta^2*(gamma(1+2/beta)-(gamma(1+1/beta))^2) )
+
+           ###
+           fit.pars <- cbind(coef, beta, theta)
+           colnames(fit.pars) <- c("Coef", "Alpha", "Beta")
+
+       } else {
+ 
+           SDp <- sqrt( (exp(beta^2)-1)*exp(2*theta+beta^2) )
+
+           ###
+           fit.pars <- cbind(coef, theta, beta)
+           colnames(fit.pars) <- c("Coef", "Mu", "Sigma")
+
+       } # end if.
+
+       ###
+       fit.pars <- fit.pars[oidx,,drop=FALSE]
+       rownames(fit.pars) <- paste("Comp.", seq(ncomp), sep="")
+
+       ###
+       SDp <- SDp[oidx]
+
+       ###
+       normTEST <- unclass(shapiro.test(x=residuals))
+
+       ###
+       if (useIndex==TRUE) {
+
+           if (expGSlev==TRUE) {
+
+               gs.pars[,2] <- exp(pab[1]+pab[2]*gs.pars[,2])
+               gs.pars[,3] <- exp(pab[1]+pab[2]*gs.pars[,3])
+               gs.pars[,4] <- exp(pab[1]+pab[2]*gs.pars[,4]) 
+
+               ###
+               SDp <-  gs.pars[,2]*pab[2]*SDp      
+
+           } else {
+
+               gs.pars[,2] <- pab[1]+pab[2]*gs.pars[,2]
+               gs.pars[,3] <- pab[1]+pab[2]*gs.pars[,3]
+               gs.pars[,4] <- pab[1]+pab[2]*gs.pars[,4]
+
+               ###
+               SDp <- pab[2]*SDp 
+
+           } # end if.
+
+       } # end if.
+
+       ###
+       gs.pars <- cbind(gs.pars, SDp)
+
+       ###
+       colnames(gs.pars) <- c("Proportion", "Mean", "Median", "Mode", "SD")   
+       rownames(gs.pars) <- paste("Comp.", seq(ncomp), sep="")
+
+       ###
+       ### Implement a recursive unmixing protocol.
+       ###-----------------------------------------------------------------
+       if (trim==TRUE) {
+
+           if (is.null(startPars)) {
+
+               weakPK <- which(peakIDX[,1]<=0)
+
+           } else {
+
+               weakPK <- NA
+
+           } # end if. 
+
+           ###
+           if (all(is.finite(resolvec)) && min(resolvec)<mrsl && ncomp>1 && length(weakPK)>=1) {
+
+               ncomp <- ncomp - 1
+
+               ###
+               overLAPidx <- which.min(resolvec)
+
+               ###
+               vecxxx <- c(overLAPidx,overLAPidx+1)
+
+               ###
+               leaveCOMPidx <- vecxxx[which.min(gs.pars[vecxxx,1])]
+
+               ###
+               if (model=="weibull") {
+
+                   startPars <- rbind(gs.pars[,4], fit.pars[,2])
+
+               } else {
+
+                   startPars <- rbind(gs.pars[,4], fit.pars[,3])
+
+               } # end if.
+
+               ###
+               startPars <- startPars[,-leaveCOMPidx,drop=FALSE]
+
+               ### 
+               recursiveFIT <- ussGSD(gsl=gsl, gsd=gsd, ncomp=ncomp, expGSlev=expGSlev, 
+                   auto=auto, model=model, mpd=mpd, ctf=ctf, ntry=ntry, kkf=kkf, startPars=startPars, 
+                   alphaRange=alphaRange, sigmaRange=sigmaRange, useIndex=useIndex, minfunc=minfunc, 
+                   trim=trim, mrsl=mrsl, viewAutoInis=viewAutoInis, viewLM=viewLM, viewFit=viewFit, 
+                   outfile=outfile, plot=plot, rmZero=rmZero, sampleNO=sampleNO, addvl=addvl, 
+                   logxy=logxy, lwd=lwd, pch=pch, cex=cex)
+
+               ###
+               return(invisible(recursiveFIT))
+      
+           } # end if.
+
+       } # end if.
+
+       ###
+       tmdxv <- gs.pars[,4]
+       names(tmdxv) <- NULL
+       tmdyv <- vector(length=ncomp)
+
+       ###     
+       for (i in seq(ncomp))  {
+
+           tmdyv[i] <- approx(x=origin_xd, y=mat[,i], xout=tmdxv[i])$y
+
+       } # end for. 
+
+       ###
+       mat <- cbind(origin_xd, yd, yd_fit, mat)
+       rownames(mat) <- NULL
+       colnames(mat) <- c("GSlev","Volume","Fit.Volume",paste("Comp.", seq(ncomp), sep=""))
+
+       ###
+       if (!is.null(outfile)) { 
+
+           write.csv(mat, file=paste(outfile, ".csv", sep = ""))
+
+       } # end if.
+
+       ###
+       output <- list("model"=model, "ncomp"=ncomp, "expGSlev"=expGSlev, "reserveidx"=reserveidx,
+                      "fit.data"=fit.data, "fit.pars"=fit.pars, "normTest"=normTEST, "FOMs"=fom0vec, 
+                      "RSSs"=rss0vec, "acpt"=acpt, "gs.comp"=mat, "mdxv"=tmdxv, "mdyv"=tmdyv, 
+                      "residuals"=residuals, "gs.pars"=gs.pars, "sp"=sp, "resolution"=resolvec, 
+                      "deltaH"=deltaHvec, "FOM"=fom, "RSS"=rss, "R2"=R2, "RSE"=RSE)
+
+       ###
+       class(output) <- "ussgsd"
+
+       ###
+       if (plot==TRUE) {
+
+           plot_ussGSD(obj_ussgsd=output, sampleNO=sampleNO, addvl=addvl, 
+                       logxy=logxy, lwd=lwd, cex=cex, pch=pch)
+
+       } # end if.
+
+       ###
+       invisible(output)
+
+  } # end function ussGSD.
+  ###==========================================================================================================================
+  ###
+
+
+  
+  ###
+  ###***********************************************************************************
+  ### The user may also need to install and load the following external R package 
+  ### if want to perform a parallel unmixing of grain-size distributions in a batch 
+  ### pattern using the following R functions update_ussGSDbatchp() or ussGSDbatchp().
+  ###===================================================================================
+  library(parallel)
+  ###
+  library(foreach)
+  ###
+  library(snow)
+  ###
+  library(doSNOW)
+  ###=========================================================================================
+  
+
+  ###**************************************************************************************************************************
+  ### Function update_ussGSDbatchp() is used to parallelly update (re-analyze)   
+  ### the unmixing results of some specified grain-size distributions. 
+  ###==========================================================================================================================
+  ### The function contains the following arguments.
+  ###
+  ### obj_batchgsd: an S3 object of class "gsdbatch" generated using the function 
+  ###               ussGSDbatch(), ussGSDbatchp(), update_ussGSDbatch(), or update_ussGSDbatchp().
+  ###
+  ###     sampleNO: An integer vector indicating the ID numbers of the grain-size distributions 
+  ###              to be updated (re-analyzed). 
+  ###
+  ###        ncomp: An integer (with values range from 1 to 13) indicating the number of 
+  ###               components for the grain-size distributions to be re-analysed. 
+  ###
+  ###         auto: A logical value indicating whether performing a automatic grain-size unmixing, 
+  ###               in this case the user needs not to specify the initials used for optimisation.
+  ###
+  ###        model: A character indicating the model to be fitted, "weibull", or "lognormal".
+  ###               if model=NULL, the program will automatically determine the optimal model 
+  ###               which yields a smaller FOM or RSS value.
+  ###
+  ###          mpd: An integer indicating the minimum distance (in indices) of peaks to be identified.
+  ###
+  ###          ctf: A numeric value (between -1 and 1) representing a critical threshold factor  
+  ###               that controls the identification of peaks from the grain-size distribution.  
+  ###               This argument can be used to prevent identifying a false peak characterised  
+  ###               by a large positive second-order derivative. Specially, ctf=0 indicates
+  ###               that peaks with second-order derivatives above zero will be precluded. 
+  ###               The precluding effect will be increasingly suppressed as ctf increases 
+  ###               from -1 to 1.
+  ###
+  ###         ntry: An integer value indicating the number of trials in a trial-and-error protocol. 
+  ###
+  ###          kkf: A numeric value controlling the range of values from which random starting   
+  ###               parameters will be generated during the "trial-and-error" protocol.
+  ###
+  ###    startPars: A two-row matrix containing starting parameters used for unmixing, the first
+  ###               row contains the modes of individual components, and the second row contains
+  ###               the alpha (Weibull distribution) or sigma (Lognormal distribution) value of 
+  ###               individual components.
+  ###
+  ###   alphaRange: A two-element vector indicating the lower and upper limits on alpha values  
+  ###               of a Weibull distribution generated from a Uniform distribution.
+  ###
+  ###   sigmaRange: A two-element vector indicating the lower and upper limits on sigma values 
+  ###               of a Lognormal distribution generated from a Uniform distribution.
+  ###
+  ###     useIndex: A logical value indicating whether the index of a grain-size level will be  
+  ###               used as the x-coordinate during the unmixing process.
+  ###
+  ###      minfunc: A character indicating the objective to be mimimized, either "fom" or "rss", 
+  ###               for the figure-of-merit value or the residual sum of squares, respectively.
+  ###
+  ###         trim: A logical value indicating whether the unmixing results will be trimed  
+  ###               using a recursive optimization protocol.
+  ###
+  ###         mrsl: A numeric value indicating the minimum resolution between two adjacent     
+  ###               components used to trim the unmixing results, which ranges from 0.1 to 1.
+  ###
+  ###          ncr: The number of cores to be used during the parallel unmixing process. If
+  ###               the total number of available cores (NumberOfCluster) is smaller than ncr, 
+  ###               NumberOfCluster will be used instead of ncr.
+  ###
+  ###       rmZero: A logical value indicating whether zero volume percentages will be removed.
+  ###
+  ###       saveRD: A logical value indicating whether the updated results will be saved to
+  ###               the loaded RDdata file in the current directory.
+  ###==========================================================================================================================
+  ### The function
+  ### (1) Returns a invisible list of S3 class of "batchgsd" containing the unmixed results  
+  ###     of individual samples.
+  ###
+  ### (2) Re-write the loaded RData file containing the updated unmixed results 
+  ###     in the current working directory if obj_batchgsd=NULL and saveRD=TRUE.
+  ###
+  ### Note that if obj_batchgsd=NULL, the user needs to ensure that the function load_ussGSDbatch() 
+  ### has been called and an object R "GSDbatch" has been loaded from the RData file which is 
+  ### available in the current working directory.
+  ###==========================================================================================================================
+  update_ussGSDbatchp <- function(obj_batchgsd=NULL, sampleNO, ncomp=NULL, auto=TRUE, model="weibull", 
+                                  mpd=6, ctf=0.1, ntry=100, kkf=0.1, startPars=NULL, alphaRange=NULL, 
+                                  sigmaRange=NULL, useIndex=TRUE, minfunc="fom", trim=FALSE, mrsl=0.6, 
+                                  ncr=NULL, rmZero=TRUE, saveRD=TRUE) {
+
+      if (!is.null(obj_batchgsd)) {
+
+          if(class(obj_batchgsd)!="batchgsd") 
+              stop("Error: [obj_batchgsd] should be an S3 object of class 'batchgsd'!")
+
+          ###
+          GSDbatch <- obj_batchgsd
+
+      } else {
+
+          if (!exists("gsdbatch")) 
+              stop("Error: function [load_ussGSDbatch] has not been called!")
+
+          ###
+          GSDbatch <- get("GSDbatch", envir=gsdbatch)
+
+          ###
+          xoxoxo <- get("xoxoxo", envir=gsdbatch)
+
+      } # end if.
+
+      ###
+      allmyNO <- as.numeric(substring(text=names(GSDbatch), first=3))
+
+      ###
+      if (!all(sampleNO %in% allmyNO)) {
+
+          XNO <- sampleNO[!(sampleNO %in% allmyNO)]
+
+          ###
+          cat("The following sample numbers are invalid:\n")
+          print(XNO)
+
+          ###
+          return()
+
+      } # end if.
+
+      ###
+      N <- length(sampleNO)
+
+      ###
+      if (N<10)
+          stop("Error: Parallel optimisation is forbidden for a sample size of N<10!")
+
+      ###
+      NumberOfCluster <- parallel::detectCores()
+
+      ###
+      if (!is.null(ncr)) {
+
+          if (!ncr %in% (2:100)) 
+              stop("Error: [ncr] must be an integer ranging from 2 to 100!")
+
+          ###
+          if (ncr<=NumberOfCluster) {
+
+              NumberOfCluster <- ncr
+
+          } else {
+
+              cat("Note: [ncr=",ncr,"] exceeds the number of available cores (",
+                  NumberOfCluster,")!\n",sep="")
+
+          } # end if.
+
+      } # end if.
+               
+      ###
+      cl <- snow::makeCluster(NumberOfCluster, outfile="")
+      doSNOW::registerDoSNOW(cl)
+
+      ###
+      cat("Parallel unmixing of N=", N, 
+          " GSDs in a batch pattern is in progress, please wait, ...\n", sep="")
+
+      ###
+      pb <- txtProgressBar(max=N, style=3)
+      progress <- function(n) setTxtProgressBar(pb, n)
+      opts <- list(progress=progress)
+
+      ### Parallel unmixing using the R function ussGSD(). 
+      ###-------------------------------------------------------------------------------------
+      updateGSDbatch <- foreach::foreach(kk=1:N, .inorder=TRUE, .options.snow=opts, 
+                                         .packages=c("pracma","tgcd","minpack.lm"), 
+                                         .export="ussGSD", .verbose=FALSE) %dopar% {
+
+          ###
+          gsl <- GSDbatch[[sampleNO[kk]]]$gs.comp[,1]
+          gsd <- GSDbatch[[sampleNO[kk]]]$gs.comp[,2]
+          expGSlev <- GSDbatch[[sampleNO[kk]]]$expGSlev
+
+          ###
+          if (!is.null(model)) {
+
+              res_ussGSD <- try(ussGSD(gsl=gsl, gsd=gsd, ncomp=ncomp, expGSlev=expGSlev,   
+                                       auto=auto, model=model, mpd=mpd, ctf=ctf, ntry=ntry, 
+                                       kkf=kkf, startPars=startPars, alphaRange=alphaRange, 
+                                       sigmaRange=sigmaRange, useIndex=useIndex, minfunc=minfunc, 
+                                       trim=trim, mrsl=mrsl, viewAutoInis=FALSE, viewLM=FALSE, 
+                                       viewFit=FALSE, outfile=NULL, rmZero=rmZero, plot=FALSE), 
+                                       silent=TRUE)
+    
+              ###
+              if (class(res_ussGSD)!="try-error") { 
+
+                  return(res_ussGSD)
+
+              } else {
+
+                  return(NULL)
+
+              } # end if. 
+
+          } else {
+
+              res_ussGSDwb <- try(ussGSD(gsl=gsl, gsd=gsd, ncomp=ncomp, expGSlev=expGSlev,   
+                                         auto=auto, model="weibull", mpd=mpd, ctf=ctf, ntry=ntry, 
+                                         kkf=kkf, startPars=startPars, alphaRange=alphaRange, 
+                                         sigmaRange=sigmaRange, useIndex=useIndex, minfunc=minfunc, 
+                                         trim=trim, mrsl=mrsl, viewAutoInis=FALSE, viewLM=FALSE, 
+                                         viewFit=FALSE, outfile=NULL, rmZero=rmZero, plot=FALSE), 
+                                         silent=TRUE)
+
+              ###
+              res_ussGSDlg <- try(ussGSD(gsl=gsl, gsd=gsd, ncomp=ncomp, expGSlev=expGSlev,   
+                                         auto=auto, model="lognormal", mpd=mpd, ctf=ctf, ntry=ntry, 
+                                         kkf=kkf, startPars=startPars, alphaRange=alphaRange, 
+                                         sigmaRange=sigmaRange, useIndex=useIndex, minfunc=minfunc, 
+                                         trim=trim, mrsl=mrsl, viewAutoInis=FALSE, viewLM=FALSE, 
+                                         viewFit=FALSE, outfile=NULL, rmZero=rmZero, plot=FALSE), 
+                                         silent=TRUE)
+
+              ###
+              if (class(res_ussGSDwb)!="try-error" && class(res_ussGSDlg)!="try-error") {
+
+                  if (minfunc=="fom") {
+
+                      minfuncVAL1 <- res_ussGSDwb$FOM
+                      minfuncVAL2 <- res_ussGSDlg$FOM
+
+                  } else {
+
+                      minfuncVAL1 <- res_ussGSDwb$RSS
+                      minfuncVAL2 <- res_ussGSDlg$RSS
+
+                  } # end if.
+
+                  ###
+                  if (minfuncVAL1<minfuncVAL2) {
+
+                      return(res_ussGSDwb)
+
+                  } else {
+
+                      return(res_ussGSDlg)
+
+                  } # end if. 
+
+              } else if (class(res_ussGSDwb)!="try-error") {
+
+                  return(res_ussGSDwb)
+
+              } else if (class(res_ussGSDlg)!="try-error") {
+
+                  return(res_ussGSDlg)
+
+              } else {
+
+                  return(NULL)
+
+              } # end if.           
+
+          } # end if.
+
+      } # end foreach. 
+
+      ###
+      cat("\n")
+      close(pb)
+
+      ###
+      foreach::registerDoSEQ()
+      snow::stopCluster(cl)
+
+      ###
+      for (kk in 1:N) {
+
+          GSDbatch[[sampleNO[kk]]] <- updateGSDbatch[[kk]] 
+
+      } # end for.
+
+      ###
+      if (is.null(obj_batchgsd)) {
+
+          assign("GSDbatch", GSDbatch, envir=gsdbatch)
+
+          ###
+          if (saveRD==TRUE) {
+
+              save(GSDbatch, file=paste(xoxoxo, ".RData", sep=""))
+
+          } # end if.
+
+      } # end if. 
+
+      ###
+      invisible(GSDbatch)
+
+  } # end function update_ussGSDbatchp.
+  ###==========================================================================================================================
+  ###
+
+
+  ###
+  ###**************************************************************************************************************************
+  ### Function ussGSDbatchp() is used for parallel unmixing of single-sample  
+  ### grain-size distributions for a number of samples in a batch pattern. 
+  ###==========================================================================================================================
+  ### The function contains the following arguments.
+  ###
+  ###    GSDmat: A matrix storing the grain-size data used for analysis. The first row is 
+  ###            the grain-size levels, and the remaining rows are the volume percentages 
+  ###            of individual samples to be unmixed. 
+  ###
+  ###     ncomp: An integer (from 1 to 13) indicating the number of components to be fitted. 
+  ###
+  ###  expGSlev: A logical value indicating whether the grain-size level [gsl] is of 
+  ###            exponential scale.
+  ###
+  ###     model: A character indicating the model to be fitted, "weibull", or "lognormal".
+  ###            if model=NULL, the program will automatically determine the optimal model 
+  ###            which yields a smaller FOM or RSS value.
+  ###
+  ###       mpd: An integer indicating the minimum distance (in indices) of peaks to be identified.
+  ###
+  ###       ctf: A numeric value (between -1 and 1) representing a critical threshold factor  
+  ###            that controls the identification of peaks from the grain-size distribution.  
+  ###            This argument can be used to prevent identifying a false peak characterised  
+  ###            by a large positive second-order derivative. Specially, ctf=0 indicates
+  ###            that peaks with second-order derivatives above zero will be precluded. 
+  ###            The degree of precluding will be increasingly suppressed as ctf increases 
+  ###            from -1 to 1.
+  ###
+  ###      ntry: An integer indicating the number of trials in a trial-and-error protocol. 
+  ###
+  ###       kkf: A numeric value controlling the range of values from which random starting   
+  ###            parameters will be generated during the "trial-and-error" protocol.
+  ###
+  ### startPars: A two-row matrix containing starting parameters used for unmixing, the first
+  ###            row contains the modes of individual components, and the second row contains
+  ###            the alpha (Weibull distribution) or sigma (Lognormal distribution) value of 
+  ###            individual components.
+  ###
+  ###alphaRange: A two-element vector indicating the lower and upper limits on alpha values of 
+  ###            a Weibull distribution generated from a Uniform distribution.
+  ###
+  ###sigmaRange: A two-element vector indicating the lower and upper limits on sigma values of
+  ###            a Lognormal distribution generated from a Uniform distribution.
+  ###
+  ###  useIndex: A logical value indicating whether the index of a grain-size level will be  
+  ###            used as the x-coordinate during the fitting process.
+  ###
+  ###   minfunc: A character indicating the objective to be mimimized, either "fom" or "rss",
+  ###            for the figure-of-merit value or the residual sum of squares, respectively.
+  ###
+  ###      trim: A logical value indicating whether the unmixing results will be trimed  
+  ###            using a recursive optimisation protocol.
+  ###
+  ###      mrsl: A numeric value indicating the minimum resolution between two adjacent     
+  ###            components used to trim the unmixing results, which ranges from 0.1 to 1.
+  ###
+  ###       ncr: The number of cores to be used during the parallel unmixing process. If
+  ###            the total number of available cores (NumberOfCluster) is smaller than ncr, 
+  ###            NumberOfCluster will be used instead of ncr.
+  ###
+  ###    rmZero: A logical value indicating whether removing zeros from the volume percentages.
+  ### 
+  ###   pdfname: A character indicating the name of the PDF file the unmixed results will  
+  ###            be written to. The results will not be returned to a PDF file if pdfname=NULL.
+  ###
+  ###     addvl: A logical value indicating whether vertical lines will be added to the unmixed 
+  ###            grain-size components when visualizing the results using a PDF file. 
+  ###
+  ###     logxy: A character indicating whether the x- or y-axis will be logged in the PDF file, 
+  ###            one of "", "x", "y", "xy", or NULL.
+  ###
+  ###       lwd: A numeric value giving the widths of lines in the PDF file.
+  ###       
+  ###       pch: An integer giving the type of symbols in the PDF file.
+  ### 
+  ###       cex: A numeric value giving the size of symbols in the PDF file.
+  ###
+  ###    rdname: A character indicating the name of the RDdata file the unmixed results will  
+  ###            be written to. The results will not be returned to a RDdata file if rdname=NULL.
+  ###==========================================================================================================================
+  ### The function
+  ###
+  ### (1) Returns a invisible list of S3 object of class "batchgsd" containing 
+  ###     the unmixing results of individual samples.
+  ###
+  ### (2) Generates a PDF file named "ussGSDbatch" ("or_a_different_name") showing the unmixed 
+  ###     results in the current working directory if pdfname="ussGSDbatch" ("or_a_different_name").
+  ###
+  ### (3) Generates a RData file named "ussGSDbatch" ("or_a_different_name") containing the unmixed  
+  ###     results in the current working directory if rdname="ussGSDbatch" ("or_a_different_name").
+  ###==========================================================================================================================
+  ussGSDbatchp <- function(GSDmat, ncomp=NULL, expGSlev=TRUE, model="weibull", mpd=6, ctf=0.1, 
+                           ntry=100, kkf=0.1, startPars=NULL, alphaRange=NULL, sigmaRange=NULL, 
+                           useIndex=TRUE, minfunc="fom", trim=FALSE, mrsl=0.6, ncr=NULL, rmZero=TRUE,   
+                           pdfname="ussGSDbatch", addvl=TRUE, logxy="x", lwd=3, pch=21, cex=2, 
+                           rdname="ussGSDbatch") {
+
+      GSDmat <- as.matrix(GSDmat)
+      if(nrow(GSDmat)<2) 
+          stop("Error: [GSDmat] should contain at least two rows!")
+
+      ###
+      gsl <- GSDmat[1,]
+      GSD <- GSDmat[-1,,drop=FALSE]
+
+      ###
+      if(any(diff(gsl)<=0)) 
+          stop("Error: grain-size levels in the first row of [GSDmat] are incorrect!")
+
+      ###
+      if (!is.null(pdfname) && !is.character(pdfname)) 
+           stop("Error: [pdfname] should be NULL or a character!")
+
+      ###
+      if (!is.null(rdname) && !is.character(rdname)) 
+           stop("Error: [rdname] should be NULL or a character!")
+      
+      ###
+      N <- nrow(GSD)
+
+      ###
+      if (N<10)
+          stop("Error: Parallel optimisation is forbidden for a sample size of N<10!")
+           
+      ###
+      NumberOfCluster <- parallel::detectCores()
+
+      ###
+      if (!is.null(ncr)) {
+
+          if (!ncr %in% (2:100)) 
+              stop("Error: [ncr] must be an integer ranging from 2 to 100!")
+
+          ###
+          if (ncr<=NumberOfCluster) {
+
+              NumberOfCluster <- ncr
+
+          } else {
+
+              cat("Note: [ncr=",ncr,"] exceeds the number of available cores (",
+                  NumberOfCluster,")!\n",sep="")
+
+          } # end if.
+
+      } # end if.
+               
+      ###
+      cl <- snow::makeCluster(NumberOfCluster, outfile="")
+      doSNOW::registerDoSNOW(cl)
+
+      ###
+      cat("Parallel unmixing of N=", N, 
+          " GSDs in a batch pattern is in progress, please wait, ...\n", sep="")
+
+      ###
+      pb <- txtProgressBar(max=N, style=3)
+      progress <- function(n) setTxtProgressBar(pb, n)
+      opts <- list(progress=progress)
+
+      ### Parallel unmixing using the R function ussGSD(). 
+      ###-------------------------------------------------------------------------------------
+      GSDbatch <- foreach::foreach(kk=1:N, .inorder=TRUE, .options.snow=opts, 
+                                   .packages=c("pracma","tgcd","minpack.lm"), 
+                                   .export="ussGSD", .verbose=FALSE) %dopar% {    
+
+          ###
+          if (!is.null(model)) {
+
+              res_ussGSD <- try(ussGSD(gsl=gsl, gsd=GSD[kk,], ncomp=ncomp, expGSlev=expGSlev, 
+                                       auto=TRUE, model=model, mpd=mpd, ctf=ctf, ntry=ntry, 
+                                       kkf=kkf, startPars=startPars, alphaRange=alphaRange, 
+                                       sigmaRange=sigmaRange, useIndex=useIndex, minfunc=minfunc, 
+                                       trim=trim, mrsl=mrsl, viewAutoInis=FALSE, viewLM=FALSE, 
+                                       viewFit=FALSE, outfile=NULL, rmZero=rmZero, plot=FALSE), 
+                                       silent=TRUE)
+
+              ###
+              if (class(res_ussGSD)!="try-error") { 
+
+                  return(res_ussGSD)
+
+              } else {
+
+                  return(NULL)
+
+              } # end if. 
+
+          } else {
+
+              res_ussGSDwb <- try(ussGSD(gsl=gsl, gsd=GSD[kk,], ncomp=ncomp, expGSlev=expGSlev, 
+                                         auto=TRUE, model="weibull", mpd=mpd, ctf=ctf, ntry=ntry, 
+                                         kkf=kkf, startPars=startPars, alphaRange=alphaRange, 
+                                         sigmaRange=sigmaRange, useIndex=useIndex, minfunc=minfunc, 
+                                         trim=trim, mrsl=mrsl, viewAutoInis=FALSE, viewLM=FALSE, 
+                                         viewFit=FALSE, outfile=NULL, rmZero=rmZero, plot=FALSE), 
+                                         silent=TRUE)
+
+              ###
+              res_ussGSDlg <- try(ussGSD(gsl=gsl, gsd=GSD[kk,], ncomp=ncomp, expGSlev=expGSlev, 
+                                         auto=TRUE, model="lognormal", mpd=mpd, ctf=ctf, ntry=ntry, 
+                                         kkf=kkf, startPars=startPars, alphaRange=alphaRange, 
+                                         sigmaRange=sigmaRange, useIndex=useIndex, minfunc=minfunc, 
+                                         trim=trim, mrsl=mrsl, viewAutoInis=FALSE, viewLM=FALSE, 
+                                         viewFit=FALSE, outfile=NULL, rmZero=rmZero, plot=FALSE), 
+                                         silent=TRUE)
+
+              ###
+              if (class(res_ussGSDwb)!="try-error" && class(res_ussGSDlg)!="try-error") {
+
+                  if (minfunc=="fom") {
+
+                      minfuncVAL1 <- res_ussGSDwb$FOM
+                      minfuncVAL2 <- res_ussGSDlg$FOM
+
+                  } else {
+
+                      minfuncVAL1 <- res_ussGSDwb$RSS
+                      minfuncVAL2 <- res_ussGSDlg$RSS
+
+                  } # end if.
+
+                  ###
+                  if (minfuncVAL1<minfuncVAL2) {
+
+                      return(res_ussGSDwb)
+
+                  } else {
+
+                      return(res_ussGSDlg)
+
+                  } # end if. 
+
+              } else if (class(res_ussGSDwb)!="try-error") {
+
+                  return(res_ussGSDwb)
+
+              } else if (class(res_ussGSDlg)!="try-error") {
+
+                  return(res_ussGSDlg)
+
+              } else {
+
+                  return(NULL)
+
+              } # end if.
+              
+          } # end if. 
+
+      } # end foreach.
+
+      ###
+      cat("\n")
+      close(pb)
+
+      ###
+      foreach::registerDoSEQ()
+      snow::stopCluster(cl)
+
+      ###
+      names(GSDbatch) <- paste("NO",1:N,sep="")
+      class(GSDbatch) <- "batchgsd"
+
+      ###
+      if (!is.null(pdfname)) {
+
+          plot_ussGSDbatch(obj_batchgsd=GSDbatch, pdfname=pdfname, 
+                           addvl=addvl, logxy=logxy, lwd=lwd, pch=pch, cex=cex)
+
+      } # end if. 
+
+      ###
+      if (!is.null(rdname)) {
+
+          save(GSDbatch, file=paste(rdname,".RData",sep=""))
+
+      } # end if.
+
+      ###
+      invisible(GSDbatch)
+
+  } # end function ussGSDbatchp.
+  ###==========================================================================================================================
+  ###
