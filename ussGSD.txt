@@ -1,13 +1,18 @@
 
   ###
   ###**************************************************************************************************************************
-  ### R program ussGSD (v1.0).
+  ### R program ussGSD (v2.0).
   ###**************************************************************************************************************************
   ### Methods and open source R code for efficient and flexible unmixing of single-sample grain-size distributions.
   ### Author: Jun Peng, Hunan University of Science and Technology, China. 
-  ### Last updated, 2022.03.31.
+  ### Last updated, 2022.07.03.
   ### 
-  ### Please contact Jun Peng (pengjun10@mails.ucas.ac.cn) 
+  ### Note that the current version of the program is developed for unmixing of
+  ### single-sample grain-size distributions measured using the Malvern Mastersizer-2000/3000
+  ### laser particle-size analyzer. So it can not ensure that the program will work equally 
+  ### well for datasets measured from other types of particle-size analyzers.
+  ### 
+  ### Please contact Jun Peng (pengjun10@mails.ucas.ac.cn, or 656971673@qq.com) 
   ### if you have any problem during the application of the program or 
   ### if you want to report any bug encountered during the use of the program.
   ###**************************************************************************************************************************
@@ -38,42 +43,22 @@
   ###
   ### obj_batchgsd: an S3 object of class "gsdbatch" generated using the function
   ###               ussGSDbatch(), ussGSDbatchp(), update_ussGSDbatch(), or update_ussGSDbatchp().
-  ### 
-  ###          gst: A character indicating the grain-size type ("mode", "median", or "mean") 
-  ###               to be analyzed during the application of the hierarchical clustering algorithm 
-  ###               in analyzing the unmixed grain-size distributions (components).
   ###
-  ###        ctype: An integer indicating the type of the data used for hierarchical cluster analysis, 
-  ###               either (1) the unmixing results or (2) the original GSDs.
+  ###     preclude: A vector consisting of integers representing the index of samples which  
+  ###               will be removed in the subsequent analysis. 
   ###
   ###          nkm: An integer indicating the number of clusters to be generated (from 2 to 13)
   ###               during the application of the k-means clustering algorithm in analyzing 
   ###               the unmixed grain-size mode and median.
   ###
   ###          nfm: An integer indicating the number of clusters to be generated (from 2 to 13)
-  ###               during the application of the Bayesian clustering algorithm in analysing
-  ###               the unmixed grain-size mean.
+  ###               during the application of the Bayesian clustering algorithm based on the 
+  ###               variance-accounted finite mixture model in analysing the unmixed mean grain 
+  ###               sizes of individual components.
   ###
-  ###          nhc: An integer indicating the number of clusters to be generated (from 2 to 13)  
-  ###               during the application of the hierarchical clustering algorithm in analyzing
-  ###               the unmixed grain-size distributions (components). 
-  ###
-  ###      normthd: A character indicating the method used for data normalization, 
-  ###               one of "minmax", "meansd", or "sd".
-  ###
-  ###         mdmc: A character indicating the method used for distance matrix calculation in the function
-  ###               dist(), one of "euclidean", "maximum", "manhattan", "canberra", "binary" or "minkowski".
-  ###
-  ###          agm: A character indicating the agglomeration method to be used in the function hclust(), 
-  ###               one of "ward.D", "ward.D2", "single", "complete", "average", "mcquitty", "median", 
-  ###               or "centroid". 
-  ###
-  ###         comb: An integer (from 1 to 10) indicating the type of the combination used for generating 
-  ###               the data used for hierarchical clustering (used only if ctype=1).
-  ###
-  ###           nr: An integer indicating the number of rows generated in the PDF file for the unmixing results.
-  ###
-  ###           nc: An integer indicating the number of columns generated in the PDF file for the unmixing results.
+  ###     addsigma: A real number indicating the additional (relative) error that will be added 
+  ###               in quadratic to the relative standard error of mean grain sizes of individual 
+  ###               components before the implementation of the Bayesian clustering algorithm.
   ###
   ###         logx: A logical value indicating whether the grain-size levels will be ploted in a logged scale.
   ###
@@ -82,52 +67,32 @@
   ### The function 
   ### Generates a PDF file with postfix of "_summary" in the current working directory, and returns  
   ### an invisible list containing the following elements (these elements will be saved to CSV files with  
-  ### postfix of "_gsfit","_pgsp",and "_gspattern" if csv=TRUE):
+  ### postfix of "_gsfit" and "_pgsp" if csv=TRUE):
   ###
-  ### gsfit    : A data.frame summarizing the fitting results of individual GSDs, 
-  ###            with column names of
-  ###            NO-sample number, Model-fitting model, ncomp-number of components, FOM-figure of merit,
-  ###            RSS-residual sum of squares, R2-R2 statistic, RSE-residual standard error.
+  ### gsfit: A data.frame summarizing the fitting results of individual GSDs, with column names of        
+  ###        (1) NO-sample number, (2) Model-fitting model, (3) ncomp-number of components, 
+  ###        (4) FOM-figure of merit, (5) RSS-residual sum of squares, (6) R2-R2 statistic, 
+  ###        and (7) RSE-residual standard error.
   ###
-  ###  pgsp    : A matrix showing the pooled grain-size parameters and associated clustering results, 
-  ###            with column names of
-  ###            NO-sample number, Median-component median, MedianKM-KM cluster the median belongs to,
-  ###            Mode-component mode, ModeKM-KM cluster the mode belongs to, Mean-component mean,
-  ###            Sd-component standard deviation, MeanFMM-FMM cluster the mean belongs to, 
-  ###            Abundance-component abundance.           
-  ###
-  ### gspattern: A matrix showing the datasets and patterns of grain-size distributions, 
-  ###            with column names of
-  ###            NO-sample number, ncomp-number of components, weightGZ-weighted grain size, 
-  ###            dominance-degree of dominance, GZminABD1-GZ at min abundance, minABD1-min abundance,
-  ###            GZmaxABD1-GZ at max abundance, maxABD1-max abundance, minGZ1-min GZ, maxGZ1-max GZ,
-  ###            ABDminGZ1-abundance at min GZ, ABDmaxGZ1-abundance at max GZ, 
-  ###            rsdGZ-relative standard deviation of GZ, rsdABD-relative standard deviation of abundance,
-  ###            GZminABD2-GZ at second min abundance, minABD2-second min abundance,  
-  ###            GZmaxABD2-GZ at second max abundance, maxABD2-second max abundance, 
-  ###            minGZ2-second min GZ, ABDminGZ2-abundance at second min GZ, 
-  ###            maxGZ2-second max GZ, ABDmaxGZ2-abundance at second max GZ. 
-  ###            (GZ denotes the median, mode, or mean of individual grain size component, depends on argument [gst]).                       
+  ###  pgsp: A matrix showing the pooled grain-size parameters and associated clustering results, 
+  ###        with column names of (1) NO-sample number, (2) Median-component median, 
+  ###        (3) MedianKM-KM cluster the median belongs to, (4) Mode-component mode,
+  ###        (5) ModeKM-KM cluster the mode belongs to, (6) Mean-component mean,
+  ###        (7) Sd-component standard deviation, (8) MeanFMM-FMM cluster the mean belongs to, 
+  ###        and (9) Abundance-component abundance. 
   ###
   ### Note that if obj_batchgsd=NULL, the user needs to ensure that the function load_ussGSDbatch() 
-  ### has been called and an object R "GSDbatch" has been loaded from the file "ussGSDbatch.RData" 
-  ### containing in the current working directory.
+  ### has been called and an object R "GSDbatch" has been loaded from the RData file 
+  ### (e.g., "ussGSDbatch.RData") which is available from the current working directory.
   ###==========================================================================================================================
-  summary_ussGSDbatch <- function(obj_batchgsd=NULL, gst="mode", ctype=1, nkm=NULL, nfm=NULL, 
-                                  nhc=6, normthd="minmax", mdmc="euclidean", agm="complete", comb=5,
-                                  nr=10, nc=10, logx=TRUE, csv=FALSE) {
+  summary_ussGSDbatch <- function(obj_batchgsd=NULL, preclude=NULL, nkm=NULL, 
+                                  nfm=NULL, addsigma=0, logx=TRUE, csv=FALSE) {
 
-      stopifnot(is.character(gst), length(gst)==1, gst %in% c("mode", "median", "mean"),
-                is.numeric(ctype), length(ctype)==1, ctype %in% c(1,2),
+      stopifnot(is.null(preclude) || is.numeric(preclude),
                 is.null(nkm) || (is.numeric(nkm) && length(nkm)==1 && nkm %in% (2:13)),
-                is.null(nfm) || (is.numeric(nfm) && length(nfm)==1 && nhc %in% (2:13)),
-                is.null(nhc) || (is.numeric(nhc) && length(nhc)==1 && nhc %in% (2:13)),
-                is.character(normthd), length(normthd)==1, normthd %in% c("minmax","meansd","sd"),
-                is.character(mdmc), length(mdmc)==1,
-                is.character(agm), length(agm)==1,
-                is.numeric(comb), length(comb)==1, comb %in% (1:10),
-                is.numeric(nr), length(nr)==1,
-                is.numeric(nc), length(nc)==1)
+                is.null(nfm) || (is.numeric(nfm) && length(nfm)==1 && nfm %in% (2:13)),
+                length(addsigma)==1, is.numeric(addsigma), addsigma>=0,
+                length(logx)==1, is.logical(logx), length(csv)==1, is.logical(csv))
 
       ###
       if (!is.null(obj_batchgsd)) {
@@ -155,7 +120,17 @@
       N <- length(GSDbatch)
 
       ###
-      ookk <- sapply(GSDbatch, function(x) (!is.null(x)) && (!is.null(x$FOM)))
+      if (!is.null(preclude)) { 
+          
+          if (!all(preclude %in% seq(N))) stop("Error: invalid argument [preclude]!")
+
+          ###
+          for (i in 1:length(preclude)) GSDbatch[[preclude[i]]]$FOM <- Inf
+
+      } # end if.
+
+      ###
+      ookk <- sapply(GSDbatch, function(x) (!is.null(x)) && (is.finite(x$FOM)))
       if (length(ookk)==0) 
           stop("Error: no data can be used to generate the summary file!")
 
@@ -163,6 +138,18 @@
       GSDbatchx <- GSDbatch[ookk]
       Nx <- length(GSDbatchx)
 
+      ###
+      for (i in 1:Nx) {
+
+          rsdvmin <- GSDbatchx[[i]]$gs.pars[,5,drop=TRUE]/
+                     GSDbatchx[[i]]$gs.pars[,2,drop=TRUE]
+          
+          ###
+          if (any(rsdvmin<0.1)) cat("Warning: unmixing results of the ", 
+             (seq(N))[ookk][i], "-th GSD contains very small RSD value!\n\n",sep="")
+
+      } # end if.
+      
       ### 
       FOM <- sapply(GSDbatchx, function(x) x$FOM)
       RSS <- sapply(GSDbatchx, function(x) x$RSS)
@@ -188,46 +175,68 @@
       sdGZ <- c(sapply(GSDbatchx, function(x) x$gs.pars[,5]), recursive=TRUE)
 
       ###
+      oldpar <- par("mar", "mfrow", "bg", "new")
+      on.exit(par(oldpar))
+
+      ###
+      if (is.null(nkm)) {
+
+          matKM <- matrix(nrow=8, ncol=2)
+
+          ###
+          for (i in 2:9) {
+
+              ithKM <- stats::kmeans(log(modeGZ), centers=i, nstart=1000)
+
+              ###
+              matKM[i-1,1] <- ithKM$tot.withinss 
+              matKM[i-1,2] <- 1-ithKM$tot.withinss/ithKM$totss
+
+          } # end for.
+
+          ### 
+          par("mar"=c(5.1,4.1,4.1,4.1))
+
+          ###
+          plot(2:9, matKM[,1], type="o", yaxt="n", col="skyblue", 
+               cex=3, lwd=2, xlab="Number of KM clusters [nkm]", ylab="TWSS", 
+               cex.lab=1.2, main="Variation of K-Means statistics with [nkm]", 
+               cex.main=1.5)
+
+          ###
+          axis(side=2, col="skyblue", col.ticks="skyblue", lwd=3)
+
+          ###
+          par("new"=TRUE)
+          
+          ###
+          plot(2:9, matKM[,2], type="o", xaxt="n", yaxt="n", col="red", 
+               xlab="", ylab="", cex=3, lwd=2)
+
+          ###
+          axis(side=4, col="red",col.ticks="red",lwd=3)
+
+          ###
+          mtext("1-TWSS/TSS", side=4, line=2, cex=1.2)
+
+          ###
+          nkm <- as.numeric(readline(
+          paste("Please enter the number of KM clusters (i.e., [nkm]): ")))
+
+          ###
+          abline(v=nkm, lwd=3, lty=2)
+    
+      } # end if.
+
+      ###
       if (is.null(nfm)) nfm <- 0
 
       ###
       FMM <- numOSL::RadialPlotter(cbind(meanGZ,sdGZ),ncomp=nfm, 
-                                   maxcomp=13, plot=FALSE)
+                     maxcomp=13, plot=FALSE, addsigma=addsigma)
 
       ###
       nfm <- nrow(FMM$pars)
-
-      ###
-      if (is.null(nkm)) nkm <- nfm
-      if (is.null(nhc)) nhc <- nfm
-
-      ###  
-      if (gst=="mode") { 
-
-          idx <- 4
-
-          ###
-          xupper <- if (logx==TRUE) { 2.25*max(modeGZ) } else { max(GZ) }
-
-      } else if (gst=="median") {
-
-          idx <- 3
-
-          ###
-          xupper <- if (logx==TRUE) { 2.25*max(medianGZ) } else { max(GZ) }
-
-      } else {
-
-          idx <- 2
-
-          ###
-          xupper <- if (logx==TRUE) { 2.25*max(meanGZ) } else { max(GZ) }
-
-      } # end if. 
-
-      ###
-      yupper1 <- 1.25*max(abundance)
-      yupper2 <- 1.05*max(sapply(GSDbatchx, function(x) max(x$gs.comp[,2])))
 
       ###
       if (logx==TRUE) {
@@ -236,16 +245,10 @@
           myLB <- c("0.1","0.2","0.5","1","2","5","10","20","50",
                     "100","200","500","1000","2000")
 
-          ###
-          myTK1 <- c(0.2,0.5,1,2,5,10,20,50,100,200,500,1000,2000)
-
       } else {
 
           myTK <- seq(from=0, to=2000, by=400)
           myLB <- as.character(myTK)
-
-          ###
-          myTK1 <- myTK
 
       } # end if. 
      
@@ -264,28 +267,53 @@
       } # end if.
 
       ###
-      oldpar <- par("mar", "mfrow", "bg")
-      on.exit(par(oldpar))
-
-      ###
       ### THE FIRST PART. 
       ###================================================================================================
       ###************************************************************************************************
       par(mfrow=c(1,1))
       par(mar=c(2.1, 2.1, 4.1, 2.1))
+
+      ###
       plot(1,1,type="n", xaxt="n", yaxt="n", bty="n", xlab="", ylab="", 
            main="Summary of unmixing results", cex.main=2)
 
       ###
       MDL <- sapply(GSDbatchx, function(x) x$model)
-      
+      levMDL <- levels(factor(MDL))
+
+      ###
+      ### Function lgy() is used for generating legends of models.
+      ###---------------------------------------------------------
+      lgy <- function(y,yf) {
+
+          nyf <- length(yf)
+
+          ###
+          vy <- vector(length=nyf)
+
+          ###
+          for (i in 1:nyf) {
+
+              ym <- if (yf[i]=="weibull") "Weibull" else if
+                       (yf[i]=="lognormal") "Lognormal" else if
+                       (yf[i]=="weibull0")  "Weibull0" else if
+                       (yf[i]=="lognormal0") "Lognormal0" else if
+                       (yf[i]=="skewnormal0") "SN0" else if
+                       (yf[i]=="skewgnormal0") "SGN0" 
+
+              ###
+              vy[i] <- paste("Number of GSDs unmixed with ", ym,": ", sum(y==yf[i]), sep="")
+
+          } # end for.
+
+          ###
+          return(vy)
+
+      } # end function lgy.
+       
       ###
       mylegend <- c(paste("Total number of single-sample GSDs:  ", N, sep=""), "",
-                    paste("Number of GSDs failed in unmixing:  ",N-Nx,sep=""),
-                    paste("Number of GSDs analysed with Weibull:  ", 
-                          sum(MDL=="weibull"), sep=""),
-                    paste("Number of GSDs analysed with Lognormal:  ", 
-                          sum(MDL=="lognormal"), sep=""), "",
+                    paste("Number of GSDs do not used:  ",N-Nx,sep=""),lgy(MDL, levMDL), "",
                     paste("Number of GSDs with FOM>5%:  ", sum(FOM>5), sep=""),
                     paste("Number of GSDs with RSS>1:  ", sum(RSS>1), sep=""),
                     paste("Number of GSDs with R2<0.995:  ", sum(R2<0.996), sep=""),       
@@ -303,40 +331,11 @@
                     paste("Number of GSDs with ncomp=11:  ", sum(compvec==11), sep=""),
                     paste("Number of GSDs with ncomp=12:  ", sum(compvec==12), sep=""),
                     paste("Number of GSDs with ncomp=13:  ", sum(compvec==13), sep=""))
+
+      ###
       legend("top",legend=mylegend[1:(max(compvec)+11)], bty="n", cex=1.25)
 
-      ### SECOND.
-      layout(matrix(seq(nr*nc),nrow=nr, ncol=nc, byrow=TRUE), respect=TRUE)
-      par(mar=c(0.3,0.3,0.3,0.3))
-
-      ###
-      labVec <- (seq(N))[ookk]
-
-      ###
-      for (i in 1:Nx) {
-    
-          plot(GSDbatchx[[i]]$gs.pars[,c(idx,1),drop=FALSE], type="h", lwd=5, 
-               log=ifelse(logx,"x",""), xaxt="n", yaxt="n", xlim=c(0.2,xupper), 
-               ylim=c(0,yupper1), col="black")
-
-          ###
-          lines(GSDbatchx[[i]]$gs.pars[,c(idx,1),drop=FALSE], lwd=3, col="black")
-          axis(side=1, at=myTK1, labels=FALSE, cex.axis=2)
-          axis(side=2, at=myTK2, labels=FALSE, cex.axis=2)
-
-          ###
-          box(lwd=3, col="grey30")
-          text(x=1, y=80, labels=labVec[i], cex=1.25)
-
-          ###
-          par("new"=TRUE)
-          plot(GSDbatchx[[i]]$gs.comp[,c(1,2),drop=FALSE], type="l", lwd=1, 
-               log=ifelse(logx,"x",""), xaxt="n", yaxt="n", bty="n", 
-               xlim=c(0.2,xupper), ylim=c(0,yupper2), col="grey30")
-
-      } # end for.
-
-      ###
+      ### 
       layout(matrix(c(1,2,3,4),nrow=2, byrow=TRUE), respect=TRUE)
       par(mar=c(4.1, 4.1, 2.1, 2.1))
 
@@ -447,6 +446,8 @@
           ###-------------------------------------------------------------------------------------
           par(mfrow=c(1,1))
           par(mar=c(2.1, 2.1, 4.1, 2.1))
+
+          ###
           plot(1, 1, type="n", xaxt="n", yaxt="n", bty="n", xlab="", ylab="", 
                main=paste("Pattern of unmixed grain-size ", ifelse(k==1, "median","mode"),sep=""), 
                cex.main=2)
@@ -479,6 +480,8 @@
                               " (", rangeXV[12,1]," - ",rangeXV[12,2],")",sep=""),
                         paste("Centre of cluster 13:  ", kmCST[13], 
                               " (", rangeXV[13,1]," - ",rangeXV[13,2],")",sep=""))
+
+          ###
           legend("top",legend=mylegend[1:(nkm+2)], bty="n", cex=1.25)
       
           ###
@@ -512,8 +515,28 @@
                       y=c(yyv[1],yyv[2],yyv[2],yyv[1]), 
                       border="grey95", col="grey95")
 
+          } # end for.
+
+          ###
+          for (i in 1:nkm) {
+
+              XV <- kDDD[KM$cluster==i]
+              YV <- abundance[KM$cluster==i]
+
               ###
               points(x=XV, y=YV, col=colvec[i], bg=colvec[i], pch=21, cex=1)
+
+              ###
+              spreadXV <- seq(from=0.1*min(kDDD), to=max(kDDD)*1.9, 
+                              by=max(diff(sort(XV)))/10)
+
+              ###
+              normPDF <- dnorm(x=log(spreadXV), mean=mean(log(XV)), 
+                               sd=sd(log(XV)))
+
+              ###
+              points(x=spreadXV, y=max(YV)*normPDF/max(normPDF), 
+                     col=colvec[i], lwd=3, type="l")
 
           } # end for.
 
@@ -535,7 +558,7 @@
 
       ###
       yv_fmm <- log(meanGZ)
-      seyv_fmm <- sdGZ/meanGZ
+      seyv_fmm <- sqrt((sdGZ/meanGZ)^2 + addsigma^2)
 
       ###
       for (i in 1:nfm) {
@@ -543,6 +566,7 @@
           p_fmm <- FMM$pars[i,1]
           mu_fmm <- log(FMM$pars[i,3])
 
+          ###
           fmmMAT[,i] <- p_fmm/sqrt(2*pi)/seyv_fmm*
               exp(-0.5*(yv_fmm-mu_fmm)^2/seyv_fmm^2)
 
@@ -605,6 +629,8 @@
                           " (", rangeXV[12,1]," - ",rangeXV[12,2],")",sep=""),
                     paste("Centre of cluster 13:  ", kmCST[13], 
                           " (", rangeXV[13,1]," - ",rangeXV[13,2],")",sep=""))
+
+      ###
       legend("top",legend=mylegend[1:(nfm+5)], bty="n", cex=1.25)
 
       ###
@@ -707,7 +733,7 @@
 
       ###
       axis(side=1, at=myTK, labels=myLB, cex.axis=1.5, lwd=1.8)
-      axis(side=2, at=myTK2, labels=myTK2, cex.axis=1.5, lwd=1.8)
+      axis(side=2, at=myTK2, labels=myTK2, cex.axis=1.5, lwd=1.8) 
 
       ###
       for (i in 1:nfm) {
@@ -715,6 +741,12 @@
           XV <- meanGZ[cluster_fmm==i]
           YV <- abundance[cluster_fmm==i]
           seXV <- sdGZ[cluster_fmm==i]
+
+          ### Scale "seXV" using "addsigma".
+          if (addsigma!=0)  seXV <- XV*sqrt((seXV/XV)^2+addsigma^2)
+  
+          ###
+          nXV <- length(XV)
 
           ###
           xxv <- range(XV)
@@ -726,6 +758,25 @@
           ###
           arrows(x0=XV-seXV/2, y0=YV, x1=XV+seXV/2, y1=YV,
                  code=3, lwd=2, angle=90, length=0.05, col=colvec[i])
+             
+          ###
+          spreadXV <- seq(from=0.1*min(meanGZ), to=max(meanGZ)*1.9, by=max(diff(sort(XV)))/10)
+
+          ###      
+          pdfMat <- matrix(nrow=length(spreadXV), ncol=nXV)
+
+          ###
+          for(j in 1:nXV) {
+
+              pdfMat[,j] <- dnorm(x=log(spreadXV), mean=log(XV[j]), sd=seXV[j]/XV[j], log=FALSE)
+
+          } # end if.
+
+          ###
+          pdfXV <- rowSums(pdfMat)
+
+          ###
+          points(spreadXV,max(YV)*pdfXV/max(pdfXV),type="l", col=colvec[i], lwd=3)
 
       } # end for.
 
@@ -734,349 +785,27 @@
              pch=21, col=colvec[1:nfm][odrgXV], pt.bg=colvec[1:nfm][odrgXV], bty="n")
 
       ###
-      ### THE FIFTH PART. 
-      ###================================================================================================
-      ###************************************************************************************************
-      scaleGS <- function(gsl, gsd) {
-    
-          Clay <- sum(gsd[gsl<2])
-
-          ###
-          veryFineSilt <- sum(gsd[gsl>=2 & gsl<4])
-
-          ###
-          fineSilt <- sum(gsd[gsl>=4 & gsl<8])
-
-          ###
-          mediumSilt <- sum(gsd[gsl>=8 & gsl<16])
-
-          ###
-          coarseSilt <- sum(gsd[gsl>=16 & gsl<31])
-
-          ###
-          veryCoarseSilt <- sum(gsd[gsl>=31 & gsl<63])
-
-          ###
-          veryFineSand <- sum(gsd[gsl>=63 & gsl<125])
-
-          ###
-          fineSand <- sum(gsd[gsl>=125 & gsl<250])
-
-          ###
-          mediumSand <- sum(gsd[gsl>=250 & gsl<500])
-
-          ###
-          coarseSand <- sum(gsd[gsl>=500 & gsl<1000])
-
-          ###
-          veryCoarseSand <- sum(gsd[gsl>=1000 & gsl<2000])
-
-          ###
-          c(Clay, veryFineSilt, fineSilt, mediumSilt, coarseSilt, 
-            veryCoarseSilt, veryFineSand, fineSand, mediumSand, 
-            coarseSand, veryCoarseSand)
-
-      } # end function scaleGS.
-
-      ###
-      if (ctype==2) {
-
-          mat <- t(sapply(GSDbatchx, function(x) scaleGS(x$gs.comp[,1],x$gs.comp[,2])))
-
-          ###
-          okcolumn <- apply(mat, MARGIN=2, function(x) any(x>0))
-
-          ###
-          mat <- mat[,okcolumn,drop=FALSE]
-
-      } else if (ctype==1) {
-
-          mat <- c()
-
-          ###
-          for (i in 1:Nx) {
-
-              abd <- GSDbatchx[[i]]$gs.pars[,1,drop=TRUE]
-              md <- GSDbatchx[[i]]$gs.pars[,idx,drop=TRUE]
-
-              ###
-              if (logx==TRUE) {
-
-                  abdmd <- sum(abd*md)
-
-              } else {
-
-                  abdmd <- sum(abd*log(md))
-
-              } # end if.
-
-              ###
-              domtabd <- if (max(abd)>90) 5 else 
-                         if (max(abd)>60) 3 else 
-                         if (max(abd)>30) 1 else 0
-
-              ###
-              x1 <- md[which.min(abd)]
-              y1 <- min(abd)
- 
-              ###
-              x2 <- md[which.max(abd)]
-              y2 <- max(abd)
-
-              ###
-              x3 <- min(md)
-              y3 <- abd[which.min(md)]
-
-              ###
-              x4 <- max(md)
-              y4 <- abd[which.max(md)]
-
-              ###
-              if (length(abd)>1) {
-
-                  ###
-                  x11 <- md[(order(abd,decreasing=FALSE))[2]]
-                  y11 <- (sort(abd,decreasing=FALSE))[2]
-
-                  ###
-                  x22 <- md[(order(abd,decreasing=TRUE))[2]]
-                  y22 <- (sort(abd,decreasing=TRUE))[2]
-
-                  ###
-                  x33 <- (sort(md,decreasing=FALSE))[2]
-                  y33 <- abd[(order(md,decreasing=FALSE))[2]]
-
-                  ###
-                  x44 <- (sort(md,decreasing=TRUE))[2]
-                  y44 <- abd[(order(md,decreasing=TRUE))[2]]
-
-                  ###
-                  if (logx==TRUE) {
-
-                      rsdx <- sd(log(md))/mean(log(md))
-
-                  } else {
-
-                      rsdx <- sd(md)/mean(md)
-
-                  } # end if.
-
-                  ###
-                  rsdy <- sd(abd)/mean(abd)
-
-              } else {
-
-                  ###
-                  x11 <- x1
-                  y11 <- y1
-
-                  ###
-                  x22 <- x2
-                  y22 <- y2
-
-                  ###
-                  x33 <- x3
-                  y33 <- y3
- 
-                  ###
-                  x44 <- x4
-                  y44 <- y4
-
-                  ###
-                  rsdx <- rsdy <- 0
-                  
-              } # end if. 
-
-              ###
-              if (logx==TRUE) {
-
-                  x1 <- log(x1)
-                  x2 <- log(x2)
-                  x3 <- log(x3)
-                  x4 <- log(x4)
-
-                  ###
-                  x11 <- log(x11)
-                  x22 <- log(x22)
-                  x33 <- log(x33)
-                  x44 <- log(x44)
-
-              } # end if.
-
-              ###
-              proxy <- c(length(abd), abdmd, domtabd, 
-                         x1, y1, x2, y2, 
-                         x3, y3, x4, y4, 
-                         rsdx, rsdy, 
-                         x11, y11, x22, y22, 
-                         x33, y33, x44, y44)
-  
-              ###
-              nameproxy <- c("ncomp","weightGZ","dominance",
-                             "GZminABD1","minABD1", "GZmaxABD1","maxABD1", 
-                             "minGZ1", "ABDminGZ1", "maxGZ1", "ABDmaxGZ1",
-                             "rsdGZ", "rsdABD",
-                             "GZminABD2","minABD2", "GZmaxABD2","maxABD2", 
-                             "minGZ2", "ABDminGZ2", "maxGZ2", "ABDmaxGZ2")
-              
-              ###
-              combIDX <- if (comb==1) {
-
-                  seq(11)
-
-              } else if (comb==2) {
-
-                  seq(21)
-
-              } else if (comb==3) {
-
-                  c(1,2,3, seq(from=5,to=21,by=2))
-
-              } else if (comb==4) {
-
-                  c(1,2,3, seq(from=5,to=11,by=2))
-
-              } else if (comb==5) {
-
-                  seq(from=5,to=21,by=2)
-
-              } else if (comb==6) {
-
-                  seq(from=5,to=11,by=2)       
-
-              } else if (comb==7) {
-
-                  c(1,2,3, seq(from=4,to=20,by=2))       
-
-              } else if (comb==8) {
-
-                  c(1,2,3, seq(from=4,to=10,by=2)) 
-
-              } else if (comb==9) {
-
-                  seq(from=4,to=20,by=2)
-
-              } else if (comb==10) {
-
-                  seq(from=4,to=10,by=2)
-
-              } # end if.   
-
-              mat <- rbind(mat, proxy[combIDX])
-
-          } # end for.
-
-      } # end if.
-      ###
-
-      ###
-      if (normthd=="minmax") {
-
-          mat1 <- apply(mat, MARGIN=2, function(x) (x-min(x))/(max(x)-min(x)))
-
-      } else if (normthd=="meansd") {
-      
-          mat1 <- apply(mat, MARGIN=2, function(x) (x-mean(x))/sd(x))
-
-      } else if (normthd=="sd") {
-
-          mat1 <- apply(mat, MARGIN=2, function(x) x/sd(x))
-
-      } # end if.
-
-      ###
-      HC <- hclust(dist(mat1,method=mdmc)^2, method=agm)
-      clutIDX <- as.numeric(cutree(tree=HC, k=nhc))
-
-      ###
-      ###--------------------------------------------------------------------------------------
-      par(mfrow=c(1,1))
-      par(mar=c(2.1, 2.1, 4.1, 2.1))
-      plot(1,1,type="n", xaxt="n", yaxt="n", bty="n", xlab="", ylab="", 
-           main="Pattern of unmixed GSDs", cex.main=2)
-
-      ###
-      mylegend <- c(paste("Total number of analysed single-sample GSDs:  ", N,sep=""), "",
-                    paste("Algorithm: Hierarchical clustering based on ",
-                          ifelse(ctype==1,"the unmixed results","the original GSDs"),sep=""),
-                    paste("Method used for data normalisation:  ", normthd, sep=""),
-                    paste("Method used for agglomeration:  ", agm, sep=""), 
-                    paste("Method used for distance matrix calculation:  ", mdmc, sep=""), "",
-                    paste("Number of GSDs belonging to type 1 :  ", sum(clutIDX==1), sep=""),
-                    paste("Number of GSDs belonging to type 2 :  ", sum(clutIDX==2), sep=""),
-                    paste("Number of GSDs belonging to type 3 :  ", sum(clutIDX==3), sep=""),
-                    paste("Number of GSDs belonging to type 4 :  ", sum(clutIDX==4), sep=""),
-                    paste("Number of GSDs belonging to type 5 :  ", sum(clutIDX==5), sep=""),
-                    paste("Number of GSDs belonging to type 6 :  ", sum(clutIDX==6), sep=""),
-                    paste("Number of GSDs belonging to type 7 :  ", sum(clutIDX==7), sep=""),
-                    paste("Number of GSDs belonging to type 8 :  ", sum(clutIDX==8), sep=""),
-                    paste("Number of GSDs belonging to type 9 :  ", sum(clutIDX==9), sep=""),
-                    paste("Number of GSDs belonging to type 10:  ", sum(clutIDX==10), sep=""),
-                    paste("Number of GSDs belonging to type 11:  ", sum(clutIDX==11), sep=""),
-                    paste("Number of GSDs belonging to type 12:  ", sum(clutIDX==12), sep=""),
-                    paste("Number of GSDs belonging to type 13:  ", sum(clutIDX==13), sep=""))
-      legend("top",legend=mylegend[1:(nhc+7)], bty="n", cex=1.25)
-
-      ###
-      ###--------------------------------------------------------------------------------------
-      layout(matrix(seq(nr*nc),nrow=nr, ncol=nc, byrow=TRUE), respect=TRUE)
-      par(mar=c(0.3,0.3,0.3,0.3))
-
-      ###
-      for (i in 1:nhc) {
-
-          IDX0 <- which(clutIDX==i)
-          ndx <- length(IDX0)
-
-          ###
-          for (j in 1:ndx) {
-
-              jthidx <- IDX0[j]
- 
-              ###
-              plot(GSDbatchx[[jthidx]]$gs.pars[,c(idx,1),drop=FALSE], type="h", lwd=5, 
-                   log=ifelse(logx,"x",""), xaxt="n", yaxt="n", xlim=c(0.2,xupper), 
-                   ylim=c(0,yupper1), col=colvec[i])
-
-              ###
-              lines(GSDbatchx[[jthidx]]$gs.pars[,c(idx,1),drop=FALSE], lwd=3, col="purple")
-              axis(side=1, at=myTK1, labels=FALSE, cex.axis=2)
-              axis(side=2, at=myTK2, labels=FALSE, cex.axis=2)
-
-              ###
-              box(lwd=3, col=colvec[i])
-              text(x=1, y=80, labels=jthidx, cex=1.25, col=colvec[i])
-
-              ###
-              par("new"=TRUE)
-              plot(GSDbatchx[[jthidx]]$gs.comp[,c(1,2),drop=FALSE], type="l",  
-                   lwd=1, log=ifelse(logx,"x",""), xaxt="n", yaxt="n", bty="n",  
-                   xlim=c(0.2,xupper), ylim=c(0,yupper2), col="grey30")
-
-          } # end for.
-
-      } # end for.
-    
-      ###
       dev.off()
 
       ###
       gsfit <- data.frame((seq(N))[ookk], MDL, compvec, FOM, RSS, R2, RSE)
+
+      ###
       rownames(gsfit) <- NULL
       colnames(gsfit) <- c("NO","Model","ncomp","FOM", "RSS", "R2", "RSE")
     
       ###
       pgsp <- cbind(rep((seq(N))[ookk],times=compvec),
-                    medianGZ, medianKM, modeGZ, modeKM, meanGZ, sdGZ, cluster_fmm, abundance)
-      rownames(pgsp) <- NULL
-      colnames(pgsp) <- c("NO","Median", "MedianKM", "Mode", "ModeKM", "Mean", "Sd", "MeanFMM", "Abundance")
-
-      ###  
-      colnames(mat) <- nameproxy[combIDX]
-      gspattern <- cbind("NO"=(seq(N))[ookk], mat, "type"=clutIDX)
+                    medianGZ, medianKM, modeGZ, modeKM, 
+                    meanGZ, sdGZ, cluster_fmm, abundance)
 
       ###
-      output <- list("gsfit"=gsfit, "pgsp"=pgsp, "gspattern"=gspattern)
+      rownames(pgsp) <- NULL
+      colnames(pgsp) <- c("NO","Median", "MedianKM", "Mode", "ModeKM", 
+                          "Mean", "Sd", "MeanFMM", "Abundance")
+
+      ###
+      output <- list("gsfit"=gsfit, "pgsp"=pgsp)
      
       ###
       if (csv==TRUE) {
@@ -1084,14 +813,16 @@
           if (!is.null(obj_batchgsd)) {
        
               write.csv(gsfit, file="ussGSDbatch_gsfit.csv")
+
+              ###
               write.csv(pgsp, file="ussGSDbatch_pgsp.csv")
-              write.csv(gspattern, file="ussGSDbatch_gspattern.csv")
 
           } else {
 
               write.csv(gsfit, file=paste(xoxoxo,"_gsfit.csv",sep=""))
+
+              ###
               write.csv(pgsp, file=paste(xoxoxo,"_pgsp.csv",sep=""))
-              write.csv(gspattern, file=paste(xoxoxo,"_gspattern.csv",sep=""))
 
           } # end if. 
 
@@ -1122,9 +853,10 @@
   ###         auto: A logical value indicating whether performing a automatic grain-size unmixing, 
   ###               in this case the user needs not to specify the initials used for optimization.
   ###
-  ###        model: A character indicating the model to be fitted, "weibull", or "lognormal".
+  ###        model: A character indicating the model to be fitted, "weibull", "lognormal",
+  ###               "weibull0", "lognormal0", "skewnormal0", or "skewgnormal0".
   ###               if model=NULL, the program will automatically determine the optimal model 
-  ###               which yields a smaller FOM or RSS value.
+  ###               (between "weibull" and "lognormal") which yields a smaller FOM or RSS value.
   ###
   ###          mpd: An integer indicating the minimum distance (in indices) of peaks to be identified.
   ###
@@ -1141,19 +873,41 @@
   ###          kkf: A numeric value controlling the range of values from which random starting   
   ###               parameters will be generated during the "trial-and-error" protocol.
   ###
-  ###    startPars: A two-row matrix containing starting parameters used for unmixing, the first
-  ###               row contains the modes of individual components, and the second row contains
-  ###               the alpha (Weibull distribution) or sigma (Lognormal distribution) value of 
-  ###               individual components.
+  ###    startPars: if model="weibull" or "lognormal", [startPars] should be a two-column matrix 
+  ###               containing starting parameters used for unmixing, the first column contains 
+  ###               the modes of individual components, and the second row contains the alpha 
+  ###               ("weibull") or sigma ("lognormal") value of individual components.
   ###
-  ###   alphaRange: A two-element vector indicating the lower and upper limits on alpha values  
-  ###               of a Weibull distribution generated from a Uniform distribution.
+  ###               if model="weibull0" or "lognormal0", [startPars] should be a three-column 
+  ###               matrix containing starting parameters used for unmixing, the first column  
+  ###               contains the modes of individual components, the second column contains the 
+  ###               maximum volume percentages of individual components, and the thrid column 
+  ###               contains the alpha ("weibull0") or sigma ("lognormal0") value of individual 
+  ###               components.
+  ###
+  ###               if model="skewnormal0" or "skewgnormal0", [startPars] should be a four-column 
+  ###               matrix containing starting parameters used for unmixing, the first column is
+  ###               the modes of individual components, the second column is the maximum volume
+  ###               percentages of individual components,the thrid and fourth columns are the
+  ###               alpha and omega values ("skewnormal0") or sigma and q values ("skewgnormal0") 
+  ###               of individual components.  
+  ###
+  ###   alphaRange: A two-element vector indicating the lower and upper limits on alpha values of 
+  ###               the Weibull ("weibull" or "weibull0") or Skew Normal ("skewnormal0") distributions 
+  ###               generated from a Uniform distribution.
   ###
   ###   sigmaRange: A two-element vector indicating the lower and upper limits on sigma values 
-  ###               of a Lognormal distribution generated from a Uniform distribution.
+  ###               of the Lognormal ("lognormal" or "lognormal0") or Skewed Generalized Normal 
+  ###              ("skewgnormal0") distributions generated from a Uniform distribution.  
+  ###
+  ###   omegaRange: A two-element vector indicating the lower and upper limits on omega values of 
+  ###               a Skew Normal ("skewnormal0") distribution generated from a Uniform distribution.
+  ###
+  ###       qRange: A two-element vector indicating the lower and upper limits on q values of a Skewed 
+  ###               Generalized Normal ("skewgnormal0") distribution generated from a Uniform distribution.           
   ###
   ###     useIndex: A logical value indicating whether the index of a grain-size level will be  
-  ###               used as the x-coordinate during the unmixing process.
+  ###               used as the independent variable during the unmixing process.
   ###
   ###      minfunc: A character indicating the objective to be mimimized, either "fom" or "rss", 
   ###               for the figure-of-merit value or the residual sum of squares, respectively.
@@ -1170,20 +924,20 @@
   ###               the RDdata file in the current directory.
   ###==========================================================================================================================
   ### The function
-  ### (1) Returns a invisible list of S3 class of "batchgsd" containing the unmixed  
-  ###     results of individual samples.
+  ### (1) Returns a invisible list of S3 class of "batchgsd" containing 
+  ###     the unmixed results of individual samples.
   ###
   ### (2) Re-write the loaded RData file containing the updated unmixing results 
   ###     in the current working directory if obj_batchgsd=NULL and saveRD=TRUE.
   ###
   ### Note that if obj_batchgsd=NULL, the user needs to ensure that the function load_ussGSDbatch() 
-  ### has been called and an object R "GSDbatch" has been loaded from the RData file which is  
-  ### available in the current working directory.
+  ### has been called and an object R "GSDbatch" has been generated from an RData file   
+  ### (e.g., "GSDbatch.RData") which is available in the current working directory .
   ###==========================================================================================================================
   update_ussGSDbatch <- function(obj_batchgsd=NULL, sampleNO, ncomp=NULL, auto=TRUE, model="weibull", 
                                  mpd=6, ctf=0.1, ntry=100, kkf=0.1, startPars=NULL, alphaRange=NULL,  
-                                 sigmaRange=NULL, useIndex=TRUE, minfunc="fom", trim=FALSE, mrsl=0.6, 
-                                 rmZero=TRUE, saveRD=TRUE) {
+                                 sigmaRange=NULL, omegaRange=NULL, qRange=NULL, useIndex=TRUE, 
+                                 minfunc="fom", trim=FALSE, mrsl=0.6, rmZero=TRUE, saveRD=TRUE) {
 
       if (!is.null(obj_batchgsd)) {
 
@@ -1235,18 +989,30 @@
           ###
           gsl <- GSDbatch[[sampleNO[i]]]$gs.comp[,1]
           gsd <- GSDbatch[[sampleNO[i]]]$gs.comp[,2]
-          expGSlev <- GSDbatch[[sampleNO[i]]]$expGSlev
 
           ###
           if (!is.null(model)) {
+
+              if (model %in% c("weibull", "lognormal")) {
      
-              res_ussGSD <- try(ussGSD(gsl=gsl, gsd=gsd, ncomp=ncomp, expGSlev=expGSlev,  
-                                       auto=auto, model=model, mpd=mpd, ctf=ctf, ntry=ntry, 
-                                       kkf=kkf, startPars=startPars, alphaRange=alphaRange, 
-                                       sigmaRange=sigmaRange, useIndex=useIndex, minfunc=minfunc, 
-                                       trim=trim, mrsl=mrsl, viewAutoInis=FALSE, viewLM=FALSE, 
-                                       viewFit=FALSE, outfile=NULL, rmZero=rmZero, plot=FALSE), 
-                                       silent=TRUE)
+                  res_ussGSD <- try(ussGSD(gsl=gsl, gsd=gsd, ncomp=ncomp,   
+                    auto=auto, model=model, mpd=mpd, ctf=ctf, ntry=ntry, kkf=kkf, 
+                    startPars=startPars, alphaRange=alphaRange, sigmaRange=sigmaRange,
+                    useIndex=useIndex, minfunc=minfunc, trim=trim, mrsl=mrsl,
+                    viewAutoInis=FALSE, viewLM=FALSE, viewFit=FALSE, outfile=NULL, 
+                    rmZero=rmZero, plot=FALSE), silent=TRUE)
+
+              } else if (model %in% c("weibull0", "lognormal0",
+                                      "skewnormal0", "skewgnormal0")) {
+
+                  res_ussGSD <- try(ussGSD0(gsl=gsl, gsd=gsd, ncomp=ncomp,  
+                    auto=auto, model=model, mpd=mpd, ctf=ctf, ntry=ntry, kkf=kkf, 
+                    startPars=startPars, alphaRange=alphaRange, sigmaRange=sigmaRange,
+                    omegaRange=omegaRange, qRange=qRange, useIndex=useIndex, minfunc=minfunc,
+                    trim=trim, mrsl=mrsl, viewAutoInis=FALSE, viewLM=FALSE, viewFit=FALSE,
+                    outfile=NULL, rmZero=rmZero, plot=FALSE), silent=TRUE)
+              
+              } # end if.
   
               ###
               if (class(res_ussGSD)!="try-error") { 
@@ -1265,22 +1031,22 @@
 
           } else {
 
-              res_ussGSDwb <- try(ussGSD(gsl=gsl, gsd=gsd, ncomp=ncomp, expGSlev=expGSlev,  
-                                         auto=auto, model="weibull", mpd=mpd, ctf=ctf, ntry=ntry, 
-                                         kkf=kkf, startPars=startPars, alphaRange=alphaRange, 
-                                         sigmaRange=sigmaRange, useIndex=useIndex, minfunc=minfunc, 
-                                         trim=trim, mrsl=mrsl, viewAutoInis=FALSE, viewLM=FALSE, 
-                                         viewFit=FALSE, outfile=NULL, rmZero=rmZero, plot=FALSE), 
-                                         silent=TRUE)
+              res_ussGSDwb <- try(ussGSD(gsl=gsl, gsd=gsd, ncomp=ncomp,   
+                auto=auto, model="weibull", mpd=mpd, ctf=ctf, ntry=ntry, 
+                kkf=kkf, startPars=startPars, alphaRange=alphaRange, 
+                sigmaRange=sigmaRange, useIndex=useIndex, minfunc=minfunc, 
+                trim=trim, mrsl=mrsl, viewAutoInis=FALSE, viewLM=FALSE, 
+                viewFit=FALSE, outfile=NULL, rmZero=rmZero, plot=FALSE), 
+                silent=TRUE)
 
               ###
-              res_ussGSDlg <- try(ussGSD(gsl=gsl, gsd=gsd, ncomp=ncomp, expGSlev=expGSlev,  
-                                         auto=auto, model="lognormal", mpd=mpd, ctf=ctf, ntry=ntry, 
-                                         kkf=kkf, startPars=startPars, alphaRange=alphaRange, 
-                                         sigmaRange=sigmaRange, useIndex=useIndex, minfunc=minfunc, 
-                                         trim=trim, mrsl=mrsl, viewAutoInis=FALSE, viewLM=FALSE, 
-                                         viewFit=FALSE, outfile=NULL, rmZero=rmZero, plot=FALSE),
-                                         silent=TRUE)
+              res_ussGSDlg <- try(ussGSD(gsl=gsl, gsd=gsd, ncomp=ncomp,   
+                auto=auto, model="lognormal", mpd=mpd, ctf=ctf, ntry=ntry, 
+                kkf=kkf, startPars=startPars, alphaRange=alphaRange, 
+                sigmaRange=sigmaRange, useIndex=useIndex, minfunc=minfunc, 
+                trim=trim, mrsl=mrsl, viewAutoInis=FALSE, viewLM=FALSE, 
+                viewFit=FALSE, outfile=NULL, rmZero=rmZero, plot=FALSE),
+                silent=TRUE)
 
               ###
               if (class(res_ussGSDwb)!="try-error" && class(res_ussGSDlg)!="try-error") {
@@ -1290,7 +1056,7 @@
                       minfuncVAL1 <- res_ussGSDwb$FOM
                       minfuncVAL2 <- res_ussGSDlg$FOM
 
-                  } else {
+                  } else if (minfunc=="rss") {
 
                       minfuncVAL1 <- res_ussGSDwb$RSS
                       minfuncVAL2 <- res_ussGSDlg$RSS
@@ -1395,8 +1161,8 @@
   ### The function generates a PDF file in the current working directory.
   ###
   ### Note that if obj_batchgsd=NULL, the user needs to ensure that the function load_ussGSDbatch() 
-  ### has been called and an object R "GSDbatch" has been loaded from the file "ussGSDbatch.RData" 
-  ### available in the current working directory.
+  ### has been called and an object R "GSDbatch" has been generated from an RData file 
+  ### (e.g., "GSDbatch.RData") which is available in the current working directory.
   ###==========================================================================================================================
   plot_ussGSDbatch <- function(obj_batchgsd=NULL, pdfname=NULL, addvl=TRUE, 
                                logxy="x", lwd=3, pch=21, cex=2) {
@@ -1528,7 +1294,7 @@
       ###
 
       ###
-      cat("Note: a new environment called [gsdbatch] is created to hold object 'GSDbatch'!\n")
+      cat("Note: a new environment called [gsdbatch] is created to hold '",rdname,".RData'!\n",sep="")
       gsdbatch <<- new.env()
 
       ###
@@ -1552,15 +1318,13 @@
   ###
   ###     ncomp: An integer (from 1 to 13) indicating the number of components to be fitted. 
   ###
-  ###  expGSlev: A logical value indicating whether the grain-size level [gsl] is of 
-  ###            exponential scale.
-  ###
   ###      auto: A logical value indicating whether performing a automatic grain-size unmixing, 
   ###            in this case the user needs not to specify the initials used for optimization.
   ###
-  ###     model: A character indicating the model to be fitted, "weibull", or "lognormal".
+  ###     model: A character indicating the model to be fitted, "weibull", "lognormal",
+  ###            "weibull0", "lognormal0", "skewnormal0", or "skewgnormal0".
   ###            if model=NULL, the program will automatically determine the optimal model 
-  ###            which yields a smaller FOM or RSS value.
+  ###            (between "weibull" and "lognormal") which yields a smaller FOM or RSS value.
   ###
   ###       mpd: An integer indicating the minimum distance (in indices) of peaks to be identified.
   ###
@@ -1577,16 +1341,38 @@
   ###       kkf: A numeric value controlling the range of values from which random starting   
   ###            parameters will be generated during the "trial-and-error" protocol.
   ###
-  ### startPars: A two-row matrix containing starting parameters used for unmixing, the first
-  ###            row contains the modes of individual components, and the second row contains
-  ###            the alpha (Weibull distribution) or sigma (Lognormal distribution) value of 
-  ###            individual components.
+  ### startPars: if model="weibull" or "lognormal", [startPars] should be a two-column matrix 
+  ###            containing starting parameters used for unmixing, the first column contains 
+  ###            the modes of individual components, and the second row contains the alpha 
+  ###            ("weibull") or sigma ("lognormal") value of individual components.
+  ###
+  ###            if model="weibull0" or "lognormal0", [startPars] should be a three-column 
+  ###            matrix containing starting parameters used for unmixing, the first column  
+  ###            contains the modes of individual components, the second column contains the 
+  ###            maximum volume percentages of individual components, and the thrid column 
+  ###            contains the alpha ("weibull0") or sigma ("lognormal0") value of individual 
+  ###            components.
+  ###
+  ###            if model="skewnormal0" or "skewgnormal0", [startPars] should be a four-column 
+  ###            matrix containing starting parameters used for unmixing, the first column is
+  ###            the modes of individual components, the second column is the maximum volume
+  ###            percentages of individual components,the thrid and fourth columns are the
+  ###            alpha and omega values ("skewnormal0") or sigma and q values ("skewgnormal0") 
+  ###            of individual components.  
   ###
   ###alphaRange: A two-element vector indicating the lower and upper limits on alpha values of 
-  ###            a Weibull distribution generated from a Uniform distribution.
+  ###            the Weibull ("weibull" or "weibull0") or Skew Normal ("skewnormal0") distributions 
+  ###            generated from a Uniform distribution.
   ###
-  ###sigmaRange: A two-element vector indicating the lower and upper limits on sigma values of
-  ###            a Lognormal distribution generated from a Uniform distribution.
+  ###sigmaRange: A two-element vector indicating the lower and upper limits on sigma values 
+  ###            of the Lognormal ("lognormal" or "lognormal0") or Skewed Generalized Normal 
+  ###           ("skewgnormal0") distributions generated from a Uniform distribution.  
+  ###
+  ###omegaRange: A two-element vector indicating the lower and upper limits on omega values of 
+  ###            a Skew Normal ("skewnormal0") distribution generated from a Uniform distribution.
+  ###
+  ###    qRange: A two-element vector indicating the lower and upper limits on q values of a Skewed 
+  ###            Generalized Normal ("skewgnormal0") distribution generated from a Uniform distribution.
   ###
   ###  useIndex: A logical value indicating whether the index of a grain-size level will be  
   ###            used as the x-coordinate during the fitting process.
@@ -1631,11 +1417,11 @@
   ### (3) Generates a RData file named "ussGSDbatch" ("or_a_different_name") containing the unmixed  
   ###     results in the current working directory if rdname="ussGSDbatch" ("or_a_different_name").
   ###==========================================================================================================================
-  ussGSDbatch <- function(GSDmat, ncomp=NULL, expGSlev=TRUE, auto=TRUE, model="weibull",  
-                          mpd=6, ctf=0.1, ntry=100, kkf=0.1, startPars=NULL, alphaRange=NULL, 
-                          sigmaRange=NULL, useIndex=TRUE, minfunc="fom", trim=FALSE, mrsl=0.6,    
-                          rmZero=TRUE, pdfname="ussGSDbatch", addvl=TRUE, logxy="x", lwd=3, 
-                          pch=21, cex=2, rdname="ussGSDbatch") {
+  ussGSDbatch <- function(GSDmat, ncomp=NULL, auto=TRUE, model="weibull",  mpd=6, ctf=0.1, 
+                          ntry=100, kkf=0.1, startPars=NULL, alphaRange=NULL, sigmaRange=NULL, 
+                          omegaRange=NULL, qRange=NULL, useIndex=TRUE, minfunc="fom", trim=FALSE, 
+                          mrsl=0.6, rmZero=TRUE, pdfname="ussGSDbatch", addvl=TRUE, logxy="x", 
+                          lwd=3, pch=21, cex=2, rdname="ussGSDbatch") {
 
       GSDmat <- as.matrix(GSDmat)
       if(nrow(GSDmat)<2) 
@@ -1669,13 +1455,26 @@
           ###
           if (!is.null(model)) {
 
-              res_ussGSD <- try(ussGSD(gsl=gsl, gsd=GSD[i,], ncomp=ncomp, expGSlev=expGSlev, 
-                                       auto=auto, model=model, mpd=mpd, ctf=ctf, ntry=ntry, 
-                                       kkf=kkf, startPars=startPars, alphaRange=alphaRange, 
-                                       sigmaRange=sigmaRange, useIndex=useIndex, minfunc=minfunc, 
-                                       trim=trim, mrsl=mrsl, viewAutoInis=FALSE, viewLM=FALSE, 
-                                       viewFit=FALSE, outfile=NULL, rmZero=rmZero, plot=FALSE), 
-                                       silent=TRUE)
+              if (model %in% c("weibull", "lognormal")) {
+
+                  res_ussGSD <- try(ussGSD(gsl=gsl, gsd=GSD[i,], ncomp=ncomp, 
+                    auto=auto, model=model, mpd=mpd, ctf=ctf, ntry=ntry, kkf=kkf,
+                    startPars=startPars, alphaRange=alphaRange, sigmaRange=sigmaRange,
+                    useIndex=useIndex, minfunc=minfunc, trim=trim, mrsl=mrsl,
+                    viewAutoInis=FALSE, viewLM=FALSE, viewFit=FALSE, outfile=NULL, 
+                    rmZero=rmZero, plot=FALSE), silent=TRUE)
+
+              } else if (model %in% c("weibull0", "lognormal0",
+                                      "skewnormal0", "skewgnormal0")) {
+
+                  res_ussGSD <- try(ussGSD0(gsl=gsl, gsd=GSD[i,], ncomp=ncomp, 
+                    auto=auto, model=model, mpd=mpd, ctf=ctf, ntry=ntry, kkf=kkf,
+                    startPars=startPars, alphaRange=alphaRange, sigmaRange=sigmaRange,
+                    omegaRange=omegaRange, qRange=qRange, useIndex=useIndex, minfunc=minfunc, 
+                    trim=trim, mrsl=mrsl, viewAutoInis=FALSE, viewLM=FALSE, viewFit=FALSE, 
+                    outfile=NULL, rmZero=rmZero, plot=FALSE), silent=TRUE)
+
+              } # end if.
 
               ###
               if (class(res_ussGSD)!="try-error") { 
@@ -1690,22 +1489,20 @@
 
           } else {
 
-              res_ussGSDwb <- try(ussGSD(gsl=gsl, gsd=GSD[i,], ncomp=ncomp, expGSlev=expGSlev, 
-                                         auto=auto, model="weibull", mpd=mpd, ctf=ctf, ntry=ntry, 
-                                         kkf=kkf, startPars=startPars, alphaRange=alphaRange, 
-                                         sigmaRange=sigmaRange, useIndex=useIndex, minfunc=minfunc, 
-                                         trim=trim, mrsl=mrsl, viewAutoInis=FALSE, viewLM=FALSE, 
-                                         viewFit=FALSE, outfile=NULL, rmZero=rmZero, plot=FALSE), 
-                                         silent=TRUE)
+              res_ussGSDwb <- try(ussGSD(gsl=gsl, gsd=GSD[i,], ncomp=ncomp, 
+                auto=auto, model="weibull", mpd=mpd, ctf=ctf, ntry=ntry, kkf=kkf,
+                startPars=startPars, alphaRange=alphaRange, sigmaRange=sigmaRange, 
+                useIndex=useIndex, minfunc=minfunc, trim=trim, mrsl=mrsl, 
+                viewAutoInis=FALSE, viewLM=FALSE, viewFit=FALSE, outfile=NULL, 
+                rmZero=rmZero, plot=FALSE), silent=TRUE)
 
               ###
-              res_ussGSDlg <- try(ussGSD(gsl=gsl, gsd=GSD[i,], ncomp=ncomp, expGSlev=expGSlev, 
-                                         auto=auto, model="lognormal", mpd=mpd, ctf=ctf, ntry=ntry, 
-                                         kkf=kkf, startPars=startPars, alphaRange=alphaRange, 
-                                         sigmaRange=sigmaRange, useIndex=useIndex, minfunc=minfunc, 
-                                         trim=trim, mrsl=mrsl, viewAutoInis=FALSE, viewLM=FALSE, 
-                                         viewFit=FALSE, outfile=NULL, rmZero=rmZero, plot=FALSE), 
-                                         silent=TRUE)
+              res_ussGSDlg <- try(ussGSD(gsl=gsl, gsd=GSD[i,], ncomp=ncomp,  
+                auto=auto, model="lognormal", mpd=mpd, ctf=ctf, ntry=ntry, kkf=kkf,
+                startPars=startPars, alphaRange=alphaRange, sigmaRange=sigmaRange,
+                useIndex=useIndex, minfunc=minfunc, trim=trim, mrsl=mrsl,
+                viewAutoInis=FALSE, viewLM=FALSE, viewFit=FALSE, outfile=NULL,
+                rmZero=rmZero, plot=FALSE), silent=TRUE)                                    
 
               ###
               if (class(res_ussGSDwb)!="try-error" && class(res_ussGSDlg)!="try-error") {
@@ -1715,7 +1512,7 @@
                       minfuncVAL1 <- res_ussGSDwb$FOM
                       minfuncVAL2 <- res_ussGSDlg$FOM
 
-                  } else {
+                  } else if (minfunc=="rss") {
 
                       minfuncVAL1 <- res_ussGSDwb$RSS
                       minfuncVAL2 <- res_ussGSDlg$RSS
@@ -1968,7 +1765,12 @@
                       legend=c("Measured","Fitted", 
                       paste("Comp.",seq(ncomp),sep=""),
                       paste("NO:",sampleNO,sep=""),
-                      ifelse(model=="weibull","Weibull","Lognormal"), 
+                      if(model=="weibull") "Weibull" else if 
+                      (model=="lognormal") "Lognormal" else if 
+                      (model=="weibull0") "Weibull0" else if
+                      (model=="lognormal0") "Lognormal0" else if
+                      (model=="skewnormal0") "SN0" else if
+                      (model=="skewgnormal0") "SGN0", 
                       paste("RSS:",round(rss,2),sep=""), 
                       paste("FOM:",round(fom,2),sep="")), 
                       col=c("grey50", "grey30", lineCol[seq(ncomp)],NA,NA,NA,NA), 
@@ -1982,7 +1784,12 @@
                legend(ifelse(mypos,"topleft","topright"),
                       legend=c("Measured","Fitted", 
                       paste("Comp.",seq(ncomp),sep=""),
-                      ifelse(model=="weibull","Weibull","Lognormal"), 
+                      if(model=="weibull") "Weibull" else if 
+                      (model=="lognormal") "Lognormal" else if 
+                      (model=="weibull0") "Weibull0" else if
+                      (model=="lognormal0") "Lognormal0" else if
+                      (model=="skewnormal0") "SN0" else if
+                      (model=="skewgnormal0") "SGN0",
                       paste("RSS:",round(rss,2),sep=""), 
                       paste("FOM:",round(fom,2),sep="")), 
                       col=c("grey50", "grey30", lineCol[seq(ncomp)],NA,NA,NA), 
@@ -2084,7 +1891,7 @@
 
   ###
   ###**************************************************************************************************************************
-  ### Function ussGSD() is used for performing the unmixing of a single-sample grain-size distribution. 
+  ### Function ussGSD() is used for unmixing a single-sample grain-size distribution. 
   ###==========================================================================================================================
   ### The function contains the following arguments.
   ###
@@ -2094,9 +1901,6 @@
   ###              grain-size distribution. 
   ###
   ###       ncomp: An integer (from 1 to 13) indicating the number of components to be unmixed. 
-  ###
-  ###    expGSlev: A logical value indicating whether the grain-size level [gsl] is 
-  ###              of exponential scale.  
   ###
   ###        auto: A logical value indicating whether performing a automatic grain-size unmixing, 
   ###              in this case the user needs not to specify the initials used for optimization.
@@ -2119,10 +1923,10 @@
   ###              random starting parameters will be generated during the "trial-and-error" 
   ###              protocol.
   ###
-  ###   startPars: A two-row matrix containing starting parameters used for unmixing, the first
-  ###              row contains the modes of individual components, and the second row contains
-  ###              the alpha (Weibull distribution) or sigma (Lognormal distribution) value of 
-  ###              individual components.
+  ###   startPars: A two-column matrix containing starting parameters used for unmixing, 
+  ###              the first column contains the modes of individual components, and the 
+  ###              second column contains the alpha ("weibull") or sigma ("lognormal") 
+  ###              value of individual components.            
   ###
   ###  alphaRange: A two-element vector indicating the lower and upper limits on alpha values of 
   ###              a Weibull distribution generated from a Uniform distribution.
@@ -2142,8 +1946,8 @@
   ###        mrsl: A numeric value indicating the minimum resolution between two adjacent     
   ###              components used to trim the unmixing results, which ranges from 0.1 to 1. 
   ###
-  ###viewAutoInis: A logical value indicating whether the automatically generated initial values 
-  ###              will be visualized.
+  ###viewAutoInis: A logical value indicating whether the automatically generated initial modal 
+  ###              sizes will be visualized before the unmixing process if auto=TRUE.
   ###
   ###      viewLM: A logical value indicating whether the optimization using the Levenberg-Marquardt
   ###              nonlinear least-squares algorithm will be output onto the screen.
@@ -2154,7 +1958,7 @@
   ###     outfile: A character indicating the name of the returned CSV file containing the unmixing results 
   ###              of individual components. The CSV file will be saved in the current working directory.
   ###
-  ###      rmZero: A logical value indicating whether zero volume percentages will be removed.
+  ###      rmZero: A logical value indicating whether zero volume percentages of GSD will be removed.
   ###
   ###        plot: A logical value indicating whether the unmixing result will be visualized in a plot.
   ###
@@ -2178,7 +1982,7 @@
   ###
   ###      ncomp: An integer indicating the number of components used for unmixing.
   ###
-  ###   expGSlev: A logical value indicating whether the grain-size level[gsl] is measured in exponential scale.  
+  ###   expGSlev: A logical value indicating whether the grain-size levels are measured in exponential scale.  
   ###
   ### reserveidx: An integer vector indicating the indices of grain-size data points used for plotting.
   ###  
@@ -2201,8 +2005,8 @@
   ###    
   ###       mdxv: A numeric vector containing the peak locations of individual components.
   ###
-  ###       mdyv: A numeric vector containing the peak volume percentages (i.e., the heights of  
-  ###             the maximum amplitude)of individual components.
+  ###       mdyv: A numeric vector containing the peak volume percentages (i.e., the heights or  
+  ###             the maximum amplitude) of individual components.
   ###
   ###  residuals: A numeric vector containing the unmixing residuals.
   ###
@@ -2223,34 +2027,32 @@
   ###     deltaH: A numberic vector containing the difference in entropy before and after 
   ###             mixing between two adjacent components.
   ###
-  ###        FOM: A numeric value indicating the optimal figure-of-merit value.
+  ###        FOM: A numeric value indicating the calculated figure-of-merit value.
   ###
-  ###        RSS: A numeric value indicating the optimal residual sum of squares.
+  ###        RSS: A numeric value indicating the calculated residual sum of squares.
   ###   
-  ###         R2: A numeric value indicating the optimal R2 statistic.
+  ###         R2: A numeric value indicating the calculated R2 statistic.
   ###
-  ###        RSE: A numeric value indicating the optimal residual standard error. 
+  ###        RSE: A numeric value indicating the calculated residual standard error. 
   ###==========================================================================================================================
   ### In addition, the function automatically generates a plot showing the 
   ### unmixing results produced by function plot_ussGSD() if plot=TRUE.
   ###==========================================================================================================================
-  ussGSD <- function(gsl, gsd, ncomp=NULL, expGSlev=NULL, auto=FALSE, model="weibull", mpd=6, ctf=0.1,  
-                     ntry=100, kkf=0.1, startPars=NULL, alphaRange=NULL, sigmaRange=NULL, useIndex=TRUE,  
-                     minfunc="fom", trim=FALSE, mrsl=0.6, viewAutoInis=TRUE, viewLM=FALSE, viewFit=FALSE,    
-                     outfile=NULL, rmZero=TRUE, plot=TRUE, sampleNO=NULL, addvl=TRUE, logxy="x", lwd=3, 
-                     pch=21, cex=2) {
+  ussGSD <- function(gsl, gsd, ncomp=NULL, auto=FALSE, model="weibull", mpd=6, ctf=0.1, ntry=100, kkf=0.1, 
+                     startPars=NULL, alphaRange=NULL, sigmaRange=NULL, useIndex=TRUE, minfunc="fom", trim=FALSE,
+                     mrsl=0.6, viewAutoInis=TRUE, viewLM=FALSE, viewFit=FALSE, outfile=NULL, rmZero=TRUE, plot=TRUE,   
+                     sampleNO=NULL, addvl=TRUE, logxy="x", lwd=3, pch=21, cex=2) {
 
         ###
         stopifnot(length(gsl)==length(gsd),
                   is.null(ncomp) || (length(ncomp)==1 && is.numeric(ncomp) && ncomp %in% 1:13),
-                  is.null(expGSlev) || (is.logical(expGSlev) && length(expGSlev)==1),
                   is.logical(auto), length(auto)==1,
                   is.character(model), length(model)==1, model %in% c("weibull","lognormal"),
                   is.numeric(mpd), length(mpd)==1, mpd>0,
                   is.numeric(ctf), length(ctf)==1, ctf>=-1, ctf<=1,
                   is.numeric(ntry), length(ntry)==1, ntry>=2, 
                   is.numeric(kkf), length(kkf)==1, kkf>0, kkf<1,
-                  is.null(startPars) || (is.matrix(startPars) && nrow(startPars)==2), 
+                  is.null(startPars) || (is.matrix(startPars) && ncol(startPars)==2), 
                   is.null(alphaRange) || (is.numeric(alphaRange) && length(alphaRange)==2),
                   is.null(sigmaRange) || (is.numeric(sigmaRange) && length(sigmaRange)==2),
                   is.logical(useIndex), length(useIndex)==1,
@@ -2280,13 +2082,9 @@
         if (any(!is.finite(yd))) 
             stop("Error: argument [gsd] contains non-finite value!")
 
-        ###
-        if (is.null(expGSlev)) {
-
-            xd0xd0 <- round(diff(log(as.numeric(origin_xd))),3)
-            expGSlev <- ifelse(all(xd0xd0==xd0xd0[1]), TRUE, FALSE)
-
-        } # end if.
+        ### Check if the grain size levels are of log-scale.
+        xd0xd0 <- round(diff(log(as.numeric(origin_xd))),2)
+        expGSlev <- ifelse(all(xd0xd0==xd0xd0[1]), TRUE, FALSE)
 
         ###
         nd <- length(yd)     
@@ -2307,14 +2105,14 @@
 
             } # end if.
 
-            ### Build a relationship between xd and xd1.
-            ###-----------------------------------------
+            ### Build a linear relationship between xd and xd1.
+            ###------------------------------------------------
             pab <- as.numeric(lm(xd1~xd)$coefficients)
 
         } else {
 
             xd <- origin_xd
-
+            
         } # end if.
 
         ###
@@ -2396,7 +2194,8 @@
 
                 ###
                 output <- list("model"=model, "ncomp"=ncomp, "expGSlev"=expGSlev, 
-                               "reserveidx"=reserveidx, "gs.comp"=mat)
+                               "reserveidx"=reserveidx, "gs.comp"=mat, 
+                               "FOM"=Inf, "RSS"=Inf)
                 class(output) <- "ussgsd"
 
                 ###
@@ -2424,8 +2223,8 @@
             if (is.null(ncomp) && auto==FALSE) {
 
                 plot(origin_xd[reserveidx0], d2y[reserveidx0], type="n", 
-                     xlab="Grain size (um)", ylab="Second-order derivative of GSD",
-                     mgp=c(2.5,1,0), log="x", cex.axis=1.2, cex.lab=1.5, xaxt="n", cex.main=1.5,
+                     xlab="Grain size (um)", ylab="Second-order derivative of GSD", mgp=c(2.5,1,0), 
+                     log="x", cex.axis=1.2, cex.lab=1.5, xaxt="n", yaxt="n", cex.main=1.5,
                      main=paste("Identified ", length(mdgs0), " potential components",sep=""))
 
                 ###
@@ -2433,6 +2232,7 @@
 
                 ###
                 axis(side=1, at=myTK, labels=myLB, cex.axis=1.2)
+                axis(side=2, col="purple", lwd=4, cex.axis=1.2)
                 points(origin_xd[reserveidx0], d2y[reserveidx0], type="l", col="purple", lwd=4)
             
                 ###         
@@ -2483,8 +2283,8 @@
                 if (viewAutoInis==TRUE) {
 
                     plot(origin_xd[reserveidx0], d2y[reserveidx0], type="n", 
-                         xlab="Grain size (um)", ylab="Second-order derivative of GSD", 
-                         mgp=c(2.5,1,0), log="x", cex.axis=1.2, cex.lab=1.5, xaxt="n", cex.main=1.5, 
+                         xlab="Grain size (um)", ylab="Second-order derivative of GSD", mgp=c(2.5,1,0),  
+                         log="x", cex.axis=1.2, cex.lab=1.5, xaxt="n", yaxt="n", cex.main=1.5, 
                          main=paste("Number of components: ",ncomp, " out of ",Nmdgs, sep=""))
 
                     ###
@@ -2492,6 +2292,7 @@
 
                     ###
                     axis(side=1, at=myTK, labels=myLB, cex.axis=1.2)
+                    axis(side=2, col="purple", lwd=4, cex.axis=1.2)
                     points(origin_xd[reserveidx0], d2y[reserveidx0], type="l", col="purple", lwd=4)
   
                     ###
@@ -2521,8 +2322,8 @@
                 for (i in 1:ncomp) {
 
                     plot(origin_xd[reserveidx0], d2y[reserveidx0], type="n", 
-                         xlab="Grain size (um)", ylab="Second-order derivative of GSD", 
-                         mgp=c(2.5,1,0), log="x", cex.axis=1.2, cex.lab=1.5, xaxt="n", cex.main=1.5, 
+                         xlab="Grain size (um)", ylab="Second-order derivative of GSD", mgp=c(2.5,1,0), 
+                         log="x", cex.axis=1.2, cex.lab=1.5, xaxt="n", yaxt="n", cex.main=1.5, 
                          main=paste("Number of components: ",i-1, " out of ",ncomp, sep=""))
 
                     ###
@@ -2530,6 +2331,7 @@
 
                     ###
                     axis(side=1, at=myTK, labels=myLB, cex.axis=1.2)
+                    axis(side=2, col="purple", lwd=4, cex.axis=1.2)
                     points(origin_xd[reserveidx0], d2y[reserveidx0], type="l", col="purple", lwd=4)
            
                     ###
@@ -2572,15 +2374,16 @@
 
                 ###
                 plot(origin_xd[reserveidx0], d2y[reserveidx0], type="n", 
-                    xlab="Grain size (um)", ylab="Second-order derivative of GSD", 
-                    mgp=c(2.5,1,0), log="x", cex.axis=1.2, cex.lab=1.5, xaxt="n", cex.main=1.5, 
-                    main=paste("Number of components: ",ncomp, " out of ",ncomp, sep=""))
+                     xlab="Grain size (um)", ylab="Second-order derivative of GSD", mgp=c(2.5,1,0),
+                     log="x", cex.axis=1.2, cex.lab=1.5, xaxt="n", yaxt="n", cex.main=1.5, 
+                     main=paste("Number of components: ",ncomp, " out of ",ncomp, sep=""))
 
                 ###
                 box(lwd=2)
 
                 ###
                 axis(side=1, at=myTK, labels=myLB, cex.axis=1.2)
+                axis(side=2, col="purple", lwd=4, cex.axis=1.2)
                 points(origin_xd[reserveidx0], d2y[reserveidx0], type="l", col="purple", lwd=4)
   
                 ###
@@ -2603,17 +2406,17 @@
 
             if (is.null(ncomp)) { 
 
-                ncomp <- ncol(startPars)
+                ncomp <- nrow(startPars)
 
             } else {
 
-                if (ncomp!=ncol(startPars)) 
-                    stop("Error: [ncomp] must be equal to the number of columns of [startPars]!")
+                if (ncomp!=nrow(startPars)) 
+                    stop("Error: [ncomp] must be equal to the number of rows of [startPars]!")
 
             } # end if.
 
             ###
-            mdgs <- startPars[1,,drop=TRUE]    
+            mdgs <- startPars[,1,drop=TRUE]    
 
         } # end if.  
 
@@ -2633,6 +2436,9 @@
             } # end if.
 
         } # end if.
+
+        ###
+        mdgs <- mdgs[1:ncomp]
 
         ###
         ### The function to be minimised.
@@ -2657,12 +2463,12 @@
                  Mode <- abs(p[(ncomp+1):(2*ncomp)])
 
                  ###
-                 for (i in 1:ncomp) {
+                 idxm1 <- which(Mode<(1-kkf)*mdgs)
+                 Mode[idxm1] <- (1-kkf)*mdgs[idxm1]
 
-                     if (Mode[i]<(1-kkf)*mdgs[i]) Mode[i]<- (1-kkf)*mdgs[i]
-                     if (Mode[i]>(1+kkf)*mdgs[i]) Mode[i]<- (1+kkf)*mdgs[i]
-
-                 } # end for.
+                 ###
+                 idxm2 <- which(Mode>(1+kkf)*mdgs)
+                 Mode[idxm2] <- (1+kkf)*mdgs[idxm2]
 
                  ###
                  theta <- Mode/((beta-1.0)/beta)^(1.0/beta) 
@@ -2687,12 +2493,12 @@
                  Mode <- abs(p[(ncomp+1):(2*ncomp)])
 
                  ###
-                 for (i in 1:ncomp) {
+                 idxm1 <- which(Mode<(1-kkf)*mdgs)
+                 Mode[idxm1] <- (1-kkf)*mdgs[idxm1]
 
-                     if (Mode[i]<(1-kkf)*mdgs[i]) Mode[i]<- (1-kkf)*mdgs[i]
-                     if (Mode[i]>(1+kkf)*mdgs[i]) Mode[i]<- (1+kkf)*mdgs[i]
-
-                 } # end for.
+                 ###
+                 idxm2 <- which(Mode>(1+kkf)*mdgs)
+                 Mode[idxm2] <- (1+kkf)*mdgs[idxm2]
 
                  ###
                  theta <- log(Mode)+beta^2
@@ -2837,27 +2643,30 @@
                
                    ### Simulate random alpha values.
                    ###-----------------------------
-                   p0[1:ncomp] <- runif(n=ncomp, min=alphaRange[1], max=alphaRange[2])
+                   p0[1:ncomp] <- 
+                   runif(n=ncomp, min=alphaRange[1], max=alphaRange[2])
 
                } else if (model=="lognormal") {
 
                    ### Simulate random sigma values.
                    ###------------------------------
-                   p0[1:ncomp] <- exp(runif(n=ncomp, min=log(sigmaRange[1]), max=log(sigmaRange[2])))
+                   p0[1:ncomp] <- 
+                  exp(runif(n=ncomp, min=log(sigmaRange[1]), max=log(sigmaRange[2])))
 
                } # end if.
 
            } else {
 
-               parsROW2 <- startPars[2,,drop=TRUE]
+               parsCOL2 <- startPars[,2,drop=TRUE]
 
                ###
-               p0[1:ncomp] <- runif(n=ncomp, min=(1-kkf)*parsROW2, max=(1+kkf)*parsROW2)
+               p0[1:ncomp] <- runif(n=ncomp, min=(1-kkf)*parsCOL2, max=(1+kkf)*parsCOL2)
 
            } # end if.
  
            ###
-           p0[(ncomp+1):(2*ncomp)] <- runif(n=ncomp, min=(1-kkf)*mdgs[1:ncomp], max=(1+kkf)*mdgs[1:ncomp])
+           p0[(ncomp+1):(2*ncomp)] <- 
+           runif(n=ncomp, min=(1-kkf)*mdgs[1:ncomp], max=(1+kkf)*mdgs[1:ncomp])
      
            ### Parameter optimisation using the Levenberg-Marquardt algorithm.
            ###----------------------------------------------------------------
@@ -2881,17 +2690,25 @@
                    Mode0 <- abs(p[(ncomp+1):(2*ncomp)])
 
                    ###
+                   idxm1 <- which(Mode0<(1-kkf)*mdgs)
+                   Mode0[idxm1] <- (1-kkf)*mdgs[idxm1]
+
+                   ###
+                   idxm2 <- which(Mode0>(1+kkf)*mdgs)
+                   Mode0[idxm2] <- (1+kkf)*mdgs[idxm2]
+
+                   ###
                    theta0 <- Mode0/((beta0-1.0)/beta0)^(1.0/beta0) 
     
                    ###
                    mat0 <- matrix(nrow=nd, ncol=ncomp)
 
                    ###
-                   for (ii in 1:ncomp)  {
+                   for (j in 1:ncomp)  {
 
-                       mat0[,ii] <- (beta0[ii]/theta0[ii])*
-                                    ((xd/theta0[ii])^(beta0[ii]-1.0))*
-                                     exp(-(xd/theta0[ii])^beta0[ii])
+                       mat0[,j] <- (beta0[j]/theta0[j])*
+                                  ((xd/theta0[j])^(beta0[j]-1.0))*
+                                  exp(-(xd/theta0[j])^beta0[j])
 
                    } # end for.
 
@@ -2909,16 +2726,24 @@
                    Mode0 <- abs(p[(ncomp+1):(2*ncomp)])
 
                    ###
+                   idxm1 <- which(Mode0<(1-kkf)*mdgs)
+                   Mode0[idxm1] <- (1-kkf)*mdgs[idxm1]
+
+                   ###
+                   idxm2 <- which(Mode0>(1+kkf)*mdgs)
+                   Mode0[idxm2] <- (1+kkf)*mdgs[idxm2]
+
+                   ###
                    theta0 <- log(Mode0)+beta0^2
     
                    ###
                    mat0 <- matrix(nrow=nd, ncol=ncomp)
 
                    ###
-                   for (ii in 1:ncomp)  {
+                   for (j in 1:ncomp)  {
 
-                       mat0[,ii] <- 1/sqrt(2*pi)/beta0[ii]/xd*
-                                    exp(-0.5*((log(xd)-theta0[ii])/beta0[ii])^2)
+                       mat0[,j] <- 1/sqrt(2*pi)/beta0[j]/xd*
+                                  exp(-0.5*((log(xd)-theta0[j])/beta0[j])^2)
 
                    } # end for.
 
@@ -2936,8 +2761,9 @@
                ### Accept the unmixing results of the "trial-and-error" protocol 
                ### if the following conditions are satisfied.
                ###------------------------------------------------------------------
-               OOKK <- class(coef0)!="try-error" && all(is.finite(coef0)) && 
-                       all(coef0>0) &&  all(is.finite(beta0)) && all(is.finite(theta0)) && 
+               OOKK <- class(coef0)!="try-error" && 
+                       all(is.finite(coef0)) && all(coef0>0) && 
+                       all(is.finite(beta0)) && all(is.finite(theta0)) && 
                        all(is.finite(Mean0))  && all(Mean0>MINX & Mean0<MAXX) &&
                        all(is.finite(Median0)) && all(Median0>MINX & Median0<MAXX) && 
                        all(is.finite(Mode0)) && all(Mode0>MINX & Mode0<MAXX)  
@@ -2951,7 +2777,7 @@
                    coef0 <- as.numeric(coef0)
 
                    ###
-                   for (ii in 1:ncomp)  mat0[,ii] <- coef0[ii]*mat0[,ii]
+                   for (j in 1:ncomp)  mat0[,j] <- coef0[j]*mat0[,j]
 
                    ###
                    yd_fit0 <- rowSums(mat0)
@@ -2994,9 +2820,9 @@
                        points(origin_xd, rowSums(mat_vfp), col="grey30", type="l", lwd=3.0)
 
                        ###
-                       for (ii in 1:ncomp) {
+                       for (j in 1:ncomp) {
 
-                           points(origin_xd, mat_vfp[,ii], col=lineCol[ii], type="l", lwd=3)
+                           points(origin_xd, mat_vfp[,j], col=lineCol[j], type="l", lwd=3)
                        
                        } # end for.
                           
@@ -3063,7 +2889,8 @@
 
            ###
            output <- list("model"=model, "ncomp"=ncomp, "expGSlev"=expGSlev, 
-                          "reserveidx"=reserveidx, "gs.comp"=mat)
+                          "reserveidx"=reserveidx, "gs.comp"=mat, 
+                          "FOM"=Inf, "RSS"=Inf)
            class(output) <- "ussgsd"
 
            ###
@@ -3219,7 +3046,8 @@
            } # end if. 
 
            ###
-           if (all(is.finite(resolvec)) && min(resolvec)<mrsl && ncomp>1 && length(weakPK)>=1) {
+           if (all(is.finite(resolvec)) && min(resolvec)<mrsl && 
+               ncomp>1 && length(weakPK)>=1) {
 
                ncomp <- ncomp - 1
 
@@ -3235,24 +3063,26 @@
                ###
                if (model=="weibull") {
 
-                   startPars <- rbind(gs.pars[,4], fit.pars[,2])
+                   startPars <- cbind(gs.pars[,4], fit.pars[,2])
 
                } else {
 
-                   startPars <- rbind(gs.pars[,4], fit.pars[,3])
+                   startPars <- cbind(gs.pars[,4], fit.pars[,3])
 
                } # end if.
 
                ###
-               startPars <- startPars[,-leaveCOMPidx,drop=FALSE]
+               startPars <- startPars[-leaveCOMPidx,,drop=FALSE]
 
                ### 
-               recursiveFIT <- ussGSD(gsl=gsl, gsd=gsd, ncomp=ncomp, expGSlev=expGSlev, 
-                   auto=auto, model=model, mpd=mpd, ctf=ctf, ntry=ntry, kkf=kkf, startPars=startPars, 
-                   alphaRange=alphaRange, sigmaRange=sigmaRange, useIndex=useIndex, minfunc=minfunc, 
-                   trim=trim, mrsl=mrsl, viewAutoInis=viewAutoInis, viewLM=viewLM, viewFit=viewFit, 
-                   outfile=outfile, plot=plot, rmZero=rmZero, sampleNO=sampleNO, addvl=addvl, 
-                   logxy=logxy, lwd=lwd, pch=pch, cex=cex)
+               recursiveFIT <- ussGSD(gsl=gsl, gsd=gsd, ncomp=ncomp, 
+                 auto=auto, model=model, mpd=mpd, ctf=ctf, ntry=ntry, 
+                 kkf=kkf, startPars=startPars, alphaRange=alphaRange, 
+                 sigmaRange=sigmaRange, useIndex=useIndex, minfunc=minfunc, 
+                 trim=trim, mrsl=mrsl, viewAutoInis=viewAutoInis, viewLM=viewLM, 
+                 viewFit=viewFit, outfile=outfile, plot=plot, rmZero=rmZero, 
+                 sampleNO=sampleNO, addvl=addvl, logxy=logxy, lwd=lwd, pch=pch, 
+                 cex=cex)
 
                ###
                return(invisible(recursiveFIT))
@@ -3311,11 +3141,1714 @@
   ###
 
 
+  ###
+  ###**************************************************************************************************************************
+  ### Function ussGSD0() is used for unmixing single-sample grain-size distribution
+  ### using transformed probability density functions. 
+  ###==========================================================================================================================
+  ### The function contains the following arguments.
+  ###
+  ###         gsl: A numeric vector containing the grain-size levels (in unit um). 
+  ###
+  ###         gsd: A nummeric vector cotaining the volume percentages (in unit %) of the 
+  ###              grain-size distribution. 
+  ###
+  ###       ncomp: An integer (from 1 to 13) indicating the number of components to be unmixed. 
+  ###
+  ###        auto: A logical value indicating whether performing a automatic grain-size unmixing, 
+  ###              in this case the user needs not to specify the initials used for optimization.
+  ###
+  ###       model: A character indicating the model to be used, "weibull0", "lognormal0", "skewnormal0", 
+  ###              or "skewgnormal0".
+  ###
+  ###         mpd: An integer indicating the minimum distance (in indices) of peaks to be identified.
+  ###
+  ###         ctf: A numeric value (between -1 and 1) representing a critical threshold factor  
+  ###              that controls the identification of peaks from the grain-size distribution.  
+  ###              This argument can be used to prevent identifying a false peak characterized  
+  ###              by a large positive second-order derivative. Specially, ctf=0 indicates
+  ###              that peaks with second-order derivatives above zero will be precluded. 
+  ###              The precluding effect will be increasingly suppressed as ctf increases 
+  ###              from -1 to 1. 
+  ###
+  ###        ntry: An integer indicating the number of trials in a trial-and-error protocol. 
+  ###
+  ###         kkf: A numeric value controlling the range of values (sigma, or beta) from which    
+  ###              random starting parameters will be generated during the "trial-and-error" 
+  ###              protocol.
+  ###
+  ###   startPars: if model="weibull0" or "lognormal0", [startPars] should be a three-column matrix 
+  ###              containing starting parameters used for unmixing, the first column contains 
+  ###              the modes of individual components, the second column contains the maximum 
+  ###              volume percentages of individual components, and the thrid column contains
+  ###              the alpha ("weibull0") or sigma ("lognormal0") value of individual components.
+  ###
+  ###              if model="skewnormal0" or "skewgnormal0", [startPars] should be a four-column 
+  ###              matrix containing starting parameters used for unmixing, the first column is
+  ###              the modes of individual components, the second column is the maximum volume
+  ###              percentages of individual components,the thrid and fourth columns are the
+  ###              alpha and omega values ("skewnormal0") or sigma and q values ("skewgnormal0") 
+  ###              of individual components.              
+  ###
+  ###  alphaRange: A two-element vector indicating the lower and upper limits on alpha values of 
+  ###              the Weibull ("weibull0") or Skew Normal ("skewnormal0") distributions generated 
+  ###              from a Uniform distribution.
+  ###
+  ###  sigmaRange: A two-element vector indicating the lower and upper limits on sigma values 
+  ###              of the Lognormal ("lognormal0") or Skewed Generalized Normal ("skewgnormal0")  
+  ###              distributions generated from a Uniform distribution.
+  ###
+  ###  omegaRange: A two-element vector indicating the lower and upper limits on omega values of 
+  ###              a Skew Normal ("skewnormal0") distribution generated from a Uniform distribution.
+  ###
+  ###      qRange: A two-element vector indicating the lower and upper limits on q values of a Skewed 
+  ###              Generalized Normal ("skewgnormal0") distribution generated from a Uniform distribution.
+  ###
+  ###    useIndex: A logical value indicating whether the index of a grain-size level will be  
+  ###              used as the independent variable during the unmixing process.
+  ###
+  ###     minfunc: A character indicating the objective to be mimimized, either "fom" or "rss",
+  ###              for the figure-of-merit value or the residual sum of squares, respectively.
+  ###
+  ###        trim: A logical value indicating whether the unmixing results will be trimed  
+  ###              using a recursive optimization protocol.
+  ###
+  ###        mrsl: A numeric value indicating the minimum resolution between two adjacent     
+  ###              components used to trim the unmixing results, which ranges from 0.1 to 1. 
+  ###
+  ###viewAutoInis: A logical value indicating whether the automatically generated initial modal 
+  ###              sizes will be visualized before the unmixing process if auto=TRUE.
+  ###
+  ###      viewLM: A logical value indicating whether the optimization using the Levenberg-Marquardt
+  ###              nonlinear least-squares algorithm will be output onto the screen.
+  ###
+  ###     viewFit: A logical value indicating whether the trial-and-error unmixing results 
+  ###              will be visualized in a plot.
+  ###
+  ###     outfile: A character indicating the name of the returned CSV file containing the unmixing results 
+  ###              of individual components. The CSV file will be saved in the current working directory.
+  ###
+  ###      rmZero: A logical value indicating whether zero volume percentages of GSD will be removed.
+  ###
+  ###        plot: A logical value indicating whether the unmixing result will be visualized in a plot.
+  ###
+  ###    sampleNO: An integer indicating the ID number of the grain-size distribution.
+  ### 
+  ###       addvl: A logical value indicating whether vertical lines representing unmixed modal sizes      
+  ###              will be added to the plot showing the unmixed grain-size components. 
+  ###
+  ###       logxy: A character indicating whether the x- or y-axis will be logged in the plot,  
+  ###              one of "", "x", "y", "xy", or NULL.  
+  ###
+  ###         lwd: A numeric value giving the widths of lines in the plot.
+  ###       
+  ###         pch: An integer giving the type of symbols in the plot.
+  ### 
+  ###         cex: A numeric value giving the size of symbols in the plot.
+  ###==========================================================================================================================
+  ### The function returns an invisible list of S3 object of class "ussgsd" containing the following elements.
+  ###
+  ###      model: A character indicating the model used for unmixing.
+  ###
+  ###      ncomp: An integer indicating the number of components used for unmixing.
+  ###
+  ###   expGSlev: A logical value indicating whether the grain-size levels are measured in exponential scale.  
+  ###
+  ### reserveidx: An integer vector indicating the indices of grain-size data points used for plotting.
+  ###  
+  ###   fit.data: A two-column matrix containing the data used for unmixing.
+  ###
+  ###   fit.pars: A matrix containing the optimized parameters of the distribution function. 
+  ###
+  ###   normTest: A list containing the results of normality test of residuals.
+  ###
+  ###       FOMs: A numeric vector containing the figure-of-merit values generated   
+  ###             during the trial-and-error protocol.
+  ###
+  ###       RSSs: A numeric vector containing the residual sum of squares generated 
+  ###             during the trial-and-error protocol.
+  ###
+  ###       acpt: An integer indicating the number of accpeted trials.
+  ###
+  ###    gs.comp: A matrix containing the grain-size levels, the measured volume percentages, the predicted 
+  ###             volume percentages, and the unmixed volume percentages of individual components.
+  ###    
+  ###       mdxv: A numeric vector containing the peak locations of individual components.
+  ###
+  ###       mdyv: A numeric vector containing the peak volume percentages (i.e., the heights or  
+  ###             the maximum amplitude) of individual components.
+  ###
+  ###  residuals: A numeric vector containing the unmixing residuals.
+  ###
+  ###    gs.pars: A matrix containing the optimized parameters of the grain-size distrubtion, including
+  ###             the proportions, means, meadians, modes, and standard deviations of individual components.
+  ###
+  ###         sp: A matrix containing the shape parameters of unmixed individual grain-size components,
+  ###             [x1] the indice corresponding to the half volume percentage of a component (left side),
+  ###             [x2] the indice corresponding to the half volume percentage of a component (right side),
+  ###             [xm] the indice corresponding to the max volume percentage of a component,
+  ###             [d1] the half-width at the left side of a component,
+  ###             [d2] the half-width at the right side of a component,
+  ###             [thw] the total half-width of a component, 
+  ###             [sf] the symmetry factors of a component.
+  ###
+  ### resolution: A numeric vector containing the resolutions between two adjacent components.
+  ###
+  ###     deltaH: A numberic vector containing the difference in entropy before and after 
+  ###             mixing between two adjacent components.
+  ###
+  ###        FOM: A numeric value indicating the optimal figure-of-merit value.
+  ###
+  ###        RSS: A numeric value indicating the optimal residual sum of squares.
+  ###   
+  ###         R2: A numeric value indicating the optimal R2 statistic.
+  ###
+  ###        RSE: A numeric value indicating the optimal residual standard error. 
+  ###==========================================================================================================================
+  ### In addition, the function automatically generates a plot showing the 
+  ### unmixing results produced by function plot_ussGSD() if plot=TRUE.
+  ###==========================================================================================================================
+  ussGSD0 <- function(gsl, gsd, ncomp=NULL, auto=FALSE, model="weibull0", mpd=6, ctf=0.1, ntry=100, kkf=0.1, 
+                      startPars=NULL, alphaRange=NULL, sigmaRange=NULL, omegaRange=NULL, qRange=NULL, useIndex=TRUE,
+                      minfunc="fom", trim=FALSE, mrsl=0.6, viewAutoInis=TRUE, viewLM=FALSE, viewFit=FALSE, outfile=NULL,
+                      rmZero=TRUE, plot=TRUE, sampleNO=NULL, addvl=TRUE, logxy="x", lwd=3, pch=21, cex=2) {
+
+        ###
+        stopifnot(length(gsl)==length(gsd),
+                  is.null(ncomp) || (length(ncomp)==1 && is.numeric(ncomp) && ncomp %in% 1:13),
+                  is.logical(auto), length(auto)==1,
+                  is.character(model), length(model)==1, 
+                  model %in% c("weibull0","lognormal0","skewnormal0","skewgnormal0"),
+                  is.numeric(mpd), length(mpd)==1, mpd>0,
+                  is.numeric(ctf), length(ctf)==1, ctf>=-1, ctf<=1,
+                  is.numeric(ntry), length(ntry)==1, ntry>=2, 
+                  is.numeric(kkf), length(kkf)==1, kkf>0, kkf<1,
+                  is.null(startPars)  || (is.matrix(startPars) && ncol(startPars) %in% c(3,4)), 
+                  is.null(alphaRange) || (is.numeric(alphaRange) && length(alphaRange)==2),
+                  is.null(sigmaRange) || (is.numeric(sigmaRange) && length(sigmaRange)==2),
+                  is.null(omegaRange) || (is.numeric(omegaRange) && length(omegaRange)==2),
+                  is.null(qRange)     || (is.numeric(qRange) && length(qRange)==2),
+                  is.logical(useIndex), length(useIndex)==1,
+                  is.character(minfunc), length(minfunc)==1, minfunc %in% c("fom", "rss"),
+                  is.logical(trim), length(trim)==1,
+                  is.numeric(mrsl), length(mrsl)==1, mrsl>0.1, mrsl<1, 
+                  is.logical(viewAutoInis), length(viewAutoInis)==1, 
+                  is.logical(viewLM), length(viewLM)==1, 
+                  is.logical(viewFit), length(viewFit)==1,
+                  is.null(outfile) || (is.character(outfile) && length(outfile)==1),
+                  is.logical(rmZero), length(rmZero)==1,  
+                  is.logical(plot), length(plot)==1,
+                  is.null(sampleNO) || (is.numeric(sampleNO) && length(sampleNO)==1), 
+                  is.logical(addvl), length(addvl)==1, 
+                  is.character(logxy), length(logxy)==1,
+                  is.numeric(lwd), length(lwd)==1, 
+                  is.numeric(pch), length(pch)==1,
+                  is.numeric(cex), length(cex)==1)
+
+        ###
+        origin_xd <- as.numeric(gsl)
+        yd <- as.numeric(gsd)
+
+        ###
+        if (any(!is.finite(origin_xd))) 
+        stop("Error: argument [gsl] contains non-finite value!")
+        if (any(!is.finite(yd))) 
+        stop("Error: argument [gsd] contains non-finite value!")
+
+        ###
+        if (model=="skewnormal0" && useIndex==FALSE)
+        cat("Warning: apply [skewnormal0] with [useIndex=FALSE] may yield unreasonable result!\n\n")
+        if (model=="skewgnormal0" && useIndex==FALSE)
+        cat("Warning: apply [skewgnormal0] with [useIndex=FALSE] may yield unreasonable result!\n\n")
+
+        ###
+        ### Check if the grain size levels are of log-scale.
+        xd0xd0 <- round(diff(log(as.numeric(origin_xd))),2)
+        expGSlev <- ifelse(all(xd0xd0==xd0xd0[1]), TRUE, FALSE)
+
+        ###
+        nd <- length(yd)     
+
+        ###
+        if (useIndex==TRUE) {
+
+            xd <- seq(origin_xd)
+
+            ###
+            if(expGSlev==TRUE) {
+
+                xd1 <- log(origin_xd)      
+
+            } else {
+ 
+                xd1 <- origin_xd 
+
+            } # end if.
+
+            ### Build a linear relationship between xd and xd1.
+            ###------------------------------------------------
+            pab <- as.numeric(lm(xd1~xd)$coefficients)
+
+        } else {
+
+            xd <- origin_xd
+
+        } # end if.
+
+        ###
+        MINX <- min(xd)
+        MAXX <- max(xd)
+
+        ###
+        if (rmZero==TRUE) {
+
+           reserveidx <- which(yd>1e-5*max(yd))
+
+        } else {
+
+           reserveidx <- seq(nd)
+
+        } # end if.
+
+        ###
+        if (is.null(alphaRange))  { 
+
+            if (model=="weibull0") {
+
+                alphaRange <- if (useIndex==TRUE) c(6,30) else c(2,10)
+
+            } else if (model=="skewnormal0") {
+
+                alphaRange <- if (useIndex==TRUE) c(-5,5) else c(2,10)
+
+            } # end if.
+
+        } # end if.
+
+        ###
+        if (is.null(sigmaRange))  {
+
+            if (model=="lognormal0") {
+
+                sigmaRange <- if (useIndex==TRUE) c(0.01,0.2) else c(0.1,1)
+
+            } else if (model=="skewgnormal0") {
+
+                sigmaRange <- if (useIndex==TRUE) c(3,9) else c(10,30)
+
+            } # end if. 
+
+        } # end if.
+
+        ###
+        if (is.null(omegaRange)) {
+
+            omegaRange <- if (useIndex==TRUE) c(5,10) else c(5,20)
+
+        } # end if.
+
+        ###
+        if (is.null(qRange)) {
+
+            qRange <- if (useIndex==TRUE) c(0.6,0.9) else c(0.5,0.9) 
+
+        } # end if.
+
+        ###
+        myTK <- c(0.1,0.2,0.5,1,2,5,10,20,50,100,200,500,1000,2000)
+        myLB <- c("0.1","0.2","0.5","1","2","5","10","20","50",
+                  "100","200","500","1000","2000")
+
+        ###
+        boolean1 <- is.null(startPars)
+        boolean2 <- is.null(ncomp) && auto==FALSE
+        boolean3 <- auto==TRUE && viewAutoInis==TRUE
+        boolean4 <- auto==FALSE
+        boolean5 <- viewFit==TRUE
+
+        ###
+        if ( (boolean1 && (boolean2 || (boolean3 || boolean4))) || boolean5) {
+
+            oldpar <- par("mar", "mfrow", "bg", "new")
+            on.exit(par(oldpar))
+
+        } # end if. 
+
+        ###
+        if (is.null(startPars)) {
+
+            ###
+            ### Find the modes of peaks from the 
+            ### second-order derivatives of the GSD.
+            ###-----------------------------------------------
+            d2y <- tgcd::savgol(yd, drv=2, hwd=4, pod=2)
+
+            ###
+            reserveidx0 <- which(abs(d2y)>1e-4*max(d2y)) 
+
+            ###
+            peakIDX <- pracma::findpeaks(x=-d2y[reserveidx0], 
+                minpeakdistance=mpd, sortstr=TRUE)
+
+            ###
+            CTFV <- ctf*min(-d2y[reserveidx0])
+
+            ###
+            peakIDX <- peakIDX[peakIDX[,1]>CTFV,,drop=FALSE]
+
+            ###
+            if(nrow(peakIDX)==0) {
+
+                mat <- cbind(origin_xd, yd)
+                rownames(mat) <- NULL
+                colnames(mat) <- c("GSlev","Volume")
+
+                ###
+                output <- list("model"=model, "ncomp"=ncomp, "expGSlev"=expGSlev, 
+                               "reserveidx"=reserveidx, "gs.comp"=mat, 
+                               "FOM"=Inf, "RSS"=Inf)
+                class(output) <- "ussgsd"
+
+                ###
+                if (plot==TRUE) {
+
+                    plot_ussGSD(output, sampleNO=sampleNO, addvl=addvl, 
+                                lwd=lwd, cex=cex, pch=pch)
+
+                } # end if.
+
+                ###
+                cat("Note: no component can be identified from the GSD!\n")
+
+                ###
+                return(invisible(output))
+
+            } # end if.
+            ###
+
+            ###
+            mdgs0 <- origin_xd[reserveidx0][peakIDX[,2]]
+            mdgsy0 <- d2y[reserveidx0][peakIDX[,2]]
+
+            ###
+            if (is.null(ncomp) && auto==FALSE) {
+
+                plot(origin_xd[reserveidx0], d2y[reserveidx0], type="n", 
+                     xlab="Grain size (um)", ylab="Second-order derivative of GSD", mgp=c(2.5,1,0),
+                     log="x", cex.axis=1.2, cex.lab=1.5, xaxt="n", yaxt="n", cex.main=1.5,
+                     main=paste("Identified ", length(mdgs0), " potential components",sep=""))
+
+                ###
+                box(lwd=2)
+
+                ###
+                axis(side=1, at=myTK, labels=myLB, cex.axis=1.2)
+                axis(side=2, col="purple", lwd=4, cex.axis=1.2)
+                points(origin_xd[reserveidx0], d2y[reserveidx0], type="l", col="purple", lwd=4)
+            
+                ###         
+                abline(h=-CTFV, col="black", lty=2, lwd=4)
+                abline(v=mdgs0, col="grey70", lty=1, lwd=6)
+
+                ###
+                par("new"=TRUE)
+                plot(origin_xd[reserveidx0], yd[reserveidx0], log="x", type="l", 
+                     col="red", lwd=4, lty=3, xlab="", ylab="", xaxt="n", yaxt="n")
+
+                ###
+                ncomp <- as.numeric(readline(
+                paste("Please enter the number of components (i.e., [ncomp]): ")))
+
+            } # end if. 
+
+            ###
+            if (auto==TRUE) {
+
+                ### An automatic pattern.
+                mdgs <- mdgs0
+                mdgsy <- mdgsy0
+
+                ###
+                Nmdgs <- length(mdgs)
+
+                ###
+                if (is.null(ncomp)) {
+
+                    ncomp <- Nmdgs
+
+                } else {
+
+                    if (ncomp>Nmdgs) {
+
+                        cat("Note: [ncomp=",ncomp,"] exceeds the number of ", 
+                            "automatically identified peaks(k=", Nmdgs,")!\n",sep="")
+
+                        ###
+                        ncomp <- Nmdgs
+
+                    } # end if. 
+
+                } # end if. 
+
+                ###
+                if (viewAutoInis==TRUE) {
+
+                    plot(origin_xd[reserveidx0], d2y[reserveidx0], type="n", 
+                         xlab="Grain size (um)", ylab="Second-order derivative of GSD", mgp=c(2.5,1,0),  
+                         log="x", cex.axis=1.2, cex.lab=1.5, xaxt="n", yaxt="n", cex.main=1.5, 
+                         main=paste("Number of components: ",ncomp, " out of ",Nmdgs, sep=""))
+
+                    ###
+                    box(lwd=2)
+
+                    ###
+                    axis(side=1, at=myTK, labels=myLB, cex.axis=1.2)
+                    axis(side=2, col="purple", lwd=4, cex.axis=1.2)
+                    points(origin_xd[reserveidx0], d2y[reserveidx0], type="l", col="purple", lwd=4)
+  
+                    ###
+                    abline(h=-CTFV, col="black", lty=2, lwd=4)
+                    abline(v=mdgs, col="grey70", lty=1, lwd=6)
+    
+                    ###
+                    abline(v=mdgs[1:ncomp], lwd=4, col="skyblue")
+                    points(x=mdgs[1:ncomp], y=mdgsy[1:ncomp], pch=23, bg="red", col="red", cex=1.6) 
+                    text(x=mdgs[1:ncomp], y=mdgsy[1:ncomp], labels=paste("C",1:ncomp,sep=""), 
+                         col="red", cex=1.2)
+
+                    ###
+                    par("new"=TRUE)
+                    plot(origin_xd[reserveidx0], yd[reserveidx0], log="x", type="l", 
+                         col="red", lwd=3, lty=3, xlab="", ylab="", xaxt="n", yaxt="n")
+
+                } # end if. 
+
+            } else {
+
+                ### An interactive pattern.
+                ###------------------------
+                mdgs <- mdgsy <- vector(length=ncomp)
+
+                ###
+                for (i in 1:ncomp) {
+
+                    plot(origin_xd[reserveidx0], d2y[reserveidx0], type="n", 
+                         xlab="Grain size (um)", ylab="Second-order derivative of GSD", mgp=c(2.5,1,0),
+                         log="x", cex.axis=1.2, cex.lab=1.5, xaxt="n", yaxt="n", cex.main=1.5,
+                         main=paste("Number of components: ",i-1, " out of ",ncomp, sep=""))
+
+                    ###
+                    box(lwd=2)
+
+                    ###
+                    axis(side=1, at=myTK, labels=myLB, cex.axis=1.2)
+                    axis(side=2, col="purple", lwd=4, cex.axis=1.2)
+                    points(origin_xd[reserveidx0], d2y[reserveidx0], type="l", col="purple", lwd=4)
+           
+                    ###
+                    abline(h=-CTFV, col="black", lty=2, lwd=4)
+                    abline(v=mdgs0, col="grey70", lty=1, lwd=6)
+
+                    ###
+                    par("new"=TRUE)
+                    plot(origin_xd[reserveidx0], yd[reserveidx0], log="x", type="l", 
+                         col="red", lwd=4, lty=3, xlab="", ylab="", xaxt="n", yaxt="n")
+
+                    ###
+                    if (i>1)  { 
+
+                        abline(v=mdgs[1:(i-1)], lwd=3, col="skyblue") 
+                        points(x=mdgs[1:(i-1)], y=mdgsy[1:(i-1)], pch=23, bg="red", col="red", cex=1.5)
+                        text(x=mdgs[1:(i-1)], y=mdgsy[1:(i-1)], labels=paste("C",1:(i-1),sep=""), 
+                             col="red", cex=1.2)
+
+                    } # end if.
+     
+                    ###
+                    LLL <- try(locator(n=1), silent=TRUE)
+                    if (class(LLL)=="try-error") 
+                        stop("Failed in parameter initialisation by clicking!")
+
+                    ###
+                    mdgs[i] <- LLL$x
+                    mdgsy[i] <- LLL$y
+            
+                } # end for.
+
+                ###
+                apxvy <- approx(x=origin_xd[reserveidx0],y=-d2y[reserveidx0],xout=mdgs)$y
+                odapxvy <- order(apxvy, decreasing=TRUE)
+
+                ###
+                mdgs <- mdgs[odapxvy]
+                mdgsy <- mdgsy[odapxvy]
+
+                ###
+                plot(origin_xd[reserveidx0], d2y[reserveidx0], type="n", 
+                     xlab="Grain size (um)", ylab="Second-order derivative of GSD", mgp=c(2.5,1,0),
+                     log="x", cex.axis=1.2, cex.lab=1.5, xaxt="n", yaxt="n", cex.main=1.5, 
+                     main=paste("Number of components: ",ncomp, " out of ",ncomp, sep=""))
+
+                ###
+                box(lwd=2)
+
+                ###
+                axis(side=1, at=myTK, labels=myLB, cex.axis=1.2)
+                axis(side=2, col="purple", lwd=4, cex.axis=1.2)
+                points(origin_xd[reserveidx0], d2y[reserveidx0], type="l", col="purple", lwd=4)
+  
+                ###
+                abline(h=-CTFV, col="black", lty=2, lwd=4)
+                abline(v=mdgs, col="grey70", lty=1, lwd=6)
+                abline(v=mdgs, lwd=3, col="skyblue") 
+
+                ###
+                par("new"=TRUE)
+                plot(origin_xd[reserveidx0], yd[reserveidx0], log="x", type="l", 
+                     col="red", lwd=4, lty=3, xlab="", ylab="", xaxt="n", yaxt="n")
+
+                ###
+                points(x=mdgs, y=mdgsy, pch=23, bg="red", col="red", cex=1.5)
+                text(x=mdgs, y=mdgsy, labels=paste("C",(1:ncomp),sep=""), col="red", cex=1.2)
+
+            } # end if.
+
+            ###
+            mdvp <- approx(x=origin_xd[reserveidx0],y=yd[reserveidx0],xout=mdgs)$y
+
+        } else {
+
+            if (is.null(ncomp)) { 
+
+                ncomp <- nrow(startPars)
+
+            } else {
+
+                if (ncomp!=nrow(startPars)) 
+                stop("Error: [ncomp] must be equal to the number of rows of [startPars]!")
+
+            } # end if.
+
+            ###
+            mdgs <- startPars[,1,drop=TRUE] 
+            mdvp <- startPars[,2,drop=TRUE]  
+
+        } # end if.  
+
+        ###
+        ### Change the scale of mdgs.
+        ###--------------------------
+        if (useIndex==TRUE) {
+
+            if (expGSlev==TRUE) {
+
+                mdgs <- (log(mdgs)-pab[1])/pab[2]
+
+            } else {
+
+                mdgs <- (mdgs-pab[1])/pab[2]
+
+            } # end if.
+
+        } # end if.
+
+        ###
+        mdgs <- mdgs[1:ncomp]
+        mdgsORD <- order(mdgs)
+
+        ### The error function.
+        erf <- function(x) { 2 * pnorm(x * sqrt(2)) - 1 }
+
+        ###
+        ### The function to be minimised.
+        ###---------------------------------------------------
+        minfn <- function(p, xd, yd, mdgs, model, minfunc)  {
+
+             nd <- length(xd)
+
+             ###
+             hg <- rep(.Machine$double.xmax, nd)
+             if (any(!is.finite(p)))  return(hg)
+
+             ###
+             if (model=="weibull0") {
+
+                 ncomp <- length(p)/3
+ 
+                 ###
+                 xm <- abs(p[1:ncomp])
+
+                 ###
+                 vm <- abs(p[(ncomp+1):(2*ncomp)])
+
+                 ###
+                 alpha <- abs(p[(2*ncomp+1):(3*ncomp)])+1
+
+                 ###
+                 idxm1 <- which(xm<(1-kkf)*mdgs)
+                 xm[idxm1] <- (1-kkf)*mdgs[idxm1]
+
+                 ###
+                 idxm2 <- which(xm>(1+kkf)*mdgs)    
+                 xm[idxm2] <- (1+kkf)*mdgs[idxm2]
+
+                 ###
+                 mat <- matrix(nrow=nd, ncol=ncomp)
+
+                 ###
+                 for (i in 1:ncomp)  {
+
+                     mat[,i] <- vm[i]*(xd/xm[i])^(alpha[i]-1)*
+                     exp((alpha[i]-1)/alpha[i]*(1-(xd/xm[i])^alpha[i]))
+
+                 } # end for. 
+
+             } else if (model=="lognormal0") {
+
+                 ncomp <- length(p)/3
+
+                 ###
+                 xm <- abs(p[1:ncomp])
+
+                 ###
+                 vm <- abs(p[(ncomp+1):(2*ncomp)])
+
+                 ###
+                 sigma <- abs(p[(2*ncomp+1):(3*ncomp)])+0.001
+
+                 ###
+                 idxm1 <- which(xm<(1-kkf)*mdgs)
+                 xm[idxm1] <- (1-kkf)*mdgs[idxm1]
+
+                 ###
+                 idxm2 <- which(xm>(1+kkf)*mdgs)    
+                 xm[idxm2] <- (1+kkf)*mdgs[idxm2]
+
+                 ###
+                 mat <- matrix(nrow=nd, ncol=ncomp)
+
+                 ###
+                 for (i in 1:ncomp)  {
+
+                     mat[,i] <- xm[i]/xd*vm[i]*exp(-log(xm[i]/xd)*
+                     (log(xm[i]/xd)+2*(sigma[i])^2)/2/(sigma[i])^2)
+
+                 } # end for. 
+
+             } else if (model=="skewnormal0") {
+
+                 ncomp <- length(p)/4
+
+                 ###
+                 xm <- abs(p[1:ncomp])
+
+                 ###
+                 vm <- abs(p[(ncomp+1):(2*ncomp)])
+
+                 ###
+                 alpha <- p[(2*ncomp+1):(3*ncomp)]
+
+                 ###
+                 omega <- abs(p[(3*ncomp+1):(4*ncomp)])+0.001
+
+                 ###
+                 idxm1 <- which(xm<(1-kkf)*mdgs)
+                 xm[idxm1] <- (1-kkf)*mdgs[idxm1]
+
+                 ###
+                 idxm2 <- which(xm>(1+kkf)*mdgs)    
+                 xm[idxm2] <- (1+kkf)*mdgs[idxm2]
+
+                 ###
+                 mat <- matrix(nrow=nd, ncol=ncomp)
+
+                 ###
+                 for (i in 1:ncomp)  {
+
+                     delta <- alpha[i]/sqrt(1+(alpha[i])^2)
+
+                     ###
+                     v1 <- sqrt(1-2*delta^2/pi)*(4-pi)/4*
+                    (delta*sqrt(2/pi))^3/(1-2*delta^2/pi)^1.5
+
+                     ###
+                     v2 <- sign(alpha[i])/2*exp(-2*pi/abs(alpha[i]))
+
+                     ###
+                     D <- omega[i]*(sqrt(2/pi)*delta-v1-v2)
+
+                     ###
+                     mat[,i] <- vm[i]*exp(-(2*D+xd-xm[i])*(xd-xm[i])/2/(omega[i])^2)*
+                     (1+erf(alpha[i]*(xd-xm[i]+D)/sqrt(2)/omega[i]))/
+                     (1+erf(alpha[i]*D/sqrt(2)/omega[i]))
+
+                 } # end for. 
+                 
+             } else if (model=="skewgnormal0") {
+
+                 ncomp <- length(p)/4
+
+                 ###
+                 xm <- abs(p[1:ncomp])
+
+                 ###
+                 vm <- abs(p[(ncomp+1):(2*ncomp)])
+
+                 ###
+                 sigma <- abs(p[(2*ncomp+1):(3*ncomp)])+0.001
+
+                 ###
+                 qv <- abs(p[(3*ncomp+1):(4*ncomp)])+0.001
+
+                 ###
+                 pv <- 2 + 6*(1-qv)^5
+
+                 ###
+                 idxm1 <- which(xm<(1-kkf)*mdgs)
+                 xm[idxm1] <- (1-kkf)*mdgs[idxm1]
+
+                 ###
+                 idxm2 <- which(xm>(1+kkf)*mdgs)    
+                 xm[idxm2] <- (1+kkf)*mdgs[idxm2]
+
+                 ###
+                 mat <- matrix(nrow=nd, ncol=ncomp)
+
+                 ###
+                 ###x0 <- seq(from=0,to=MAXX/3,by=MAXX/3/300)
+                 x0 <- seq(from=0,to=MAXX/4,by=MAXX/4/200)
+                 
+                 ###
+                 for (i in 1:ncomp)  {
+
+                     yf1 <- exp(x0/sigma[i]*qv[i])
+                     yf2 <- exp(x0/sigma[i]/qv[i])
+
+                     ###
+                     y0 <- abs(yf1*qv[i]+yf2/qv[i])/(yf1+yf2)*
+                           exp(-0.5*(abs(log((yf1+yf2)/2)))^pv[i])
+       
+                     ###
+                     if (any(!is.finite(y0)))  return(hg)  
+
+                     ###plot(x0,y0,main=paste(sigma[i],",",qv[i],sep=""))  
+                                    
+                     L <- x0[which.max(y0)]
+
+                     ###
+                     pf1 <- exp((xd-xm[i]+L)/sigma[i]*qv[i])
+                     pf2 <- exp((xd-xm[i]+L)/sigma[i]/qv[i])
+       
+                     ###
+                     pf3 <- exp(L/sigma[i]*qv[i])
+                     pf4 <- exp(L/sigma[i]/qv[i])
+
+                     ### 
+                     mat[,i] <- vm[i]*abs(pf1*qv[i]+pf2/qv[i])*(pf3+pf4)/
+                                      abs(pf3*qv[i]+pf4/qv[i])/(pf1+pf2)*
+                                exp(-0.5*(abs(log((pf1+pf2)/2)))^pv[i]+
+                                    0.5*(abs(log((pf3+pf4)/2)))^pv[i])
+                 
+                 } # end for.
+
+             } # end if.
+             ### 
+
+             ###
+             if (all(is.finite(mat))) {
+
+                 yd_fit <- rowSums(mat)
+              
+                 ### The objective to be minimised.
+                 ###------------------------------ 
+                 if (minfunc=="fom") {
+
+                     rsdlv <- sqrt(abs(yd-yd_fit)/sum(yd_fit))
+
+                 } else if (minfunc=="rss") {
+
+                     rsdlv <- yd-yd_fit
+
+                 } # end if. 
+
+                 ###
+                 return(rsdlv)
+ 
+             } else {
+ 
+                 return(hg) 
+
+             } # end if. 
+
+       } # end function minfn.
+       ###
+       ###--------------------------------------------------------------------------------
+       ### Calculate shape parameters of grain-size components.
+       ###-----------------------------------------------------
+       calShape <- function(y, x)  {
+           
+           ny <- length(y)
+           maxloc <- which.max(y)
+           hmaxval <- max(y)/2
+           Tm <- x[maxloc]
+           
+           ###
+           T1 <- suppressWarnings(try(approx(x=y[1L:maxloc], y=x[1L:maxloc], 
+                                      xout=hmaxval)$y, silent=TRUE))
+           T2 <- suppressWarnings(try(approx(x=y[maxloc:ny], y=x[maxloc:ny], 
+                                      xout=hmaxval)$y, silent=TRUE))
+
+           ###
+           if (class(T1)!="try-error") { d1 <- Tm-T1 } else { T1 <- d1 <- NA } # end if.
+           ###
+           if (class(T2)!="try-error") { d2 <- T2-Tm } else { T2 <- d2 <- NA } # end if. 
+ 
+           ###          
+           thw <- T2-T1
+           sf <- d2/thw
+
+           ###         
+           return(c("x1"=T1, "x2"=T2, "xm"=Tm, "d1"=d1, "d2"=d2, "thw"=thw, "sf"=sf))
+
+       } # end function calShape.
+       ###--------------------------------------------------------------------------------
+
+       ###
+       lineCol <- c("deepskyblue", "orangered", "purple",   "violetred", 
+                    "yellowgreen", "lightblue",  "goldenrod", "forestgreen", 
+                    "blue",  "plum", "tan", "violet", "grey50") 
+
+       ###
+       gdcp <- 0
+       minobj <- .Machine$double.xmax
+       acpt <- 0
+
+       ###
+       if (viewLM==FALSE) {
+
+           cat(paste("ncomp=",ncomp, ", model=", model, ", ntry=", ntry, ".\n", sep="")) 
+           cat("Unmixing of single-sample Grain-Size Distribution (ussGSD)",
+               " is in progress, please wait, ...\n", sep="") 
+
+           ###
+           pb <- txtProgressBar(min=1, max=ntry, initial=1, style=1)
+
+       } # end if. 
+
+       ###
+       fom0vec <- rss0vec <- c()
+       ### Implement a trial-and-error protocol.
+       ###---------------------------------------------------------------------------------
+       for (i in seq(ntry))  {
+
+           if (model %in% c("weibull0","lognormal0")) {
+
+               p0 <- vector(length=3*ncomp)
+
+           } else if (model %in% c("skewnormal0","skewgnormal0")) {
+
+               p0 <- vector(length=4*ncomp)
+
+           } # end if.
+
+           ###
+           if (is.null(startPars)) {
+
+               if (model %in% c("weibull0","skewnormal0")) {
+               
+                   ### Simulate random alpha values.
+                   ###-----------------------------
+                   p0[(2*ncomp+1):(3*ncomp)] <- 
+                   runif(n=ncomp, min=alphaRange[1], max=alphaRange[2])
+
+               } else if (model %in% c("lognormal0","skewgnormal0")) {
+
+                   ### Simulate random sigma values.
+                   ###------------------------------
+                   p0[(2*ncomp+1):(3*ncomp)] <- 
+                   exp(runif(n=ncomp, min=log(sigmaRange[1]), max=log(sigmaRange[2])))
+
+                   if (model=="skewgnormal0") {
+
+                       p0[(2*ncomp+1):(3*ncomp)] <- (p0[(2*ncomp+1):(3*ncomp)])[mdgsORD]
+
+                   } # end if.
+
+               } # end if.
+
+               ###
+               if (model=="skewnormal0") {
+
+                   ### Simulate random omega values.
+                   ###------------------------------
+                   p0[(3*ncomp+1):(4*ncomp)] <- 
+                   exp(runif(n=ncomp, min=log(omegaRange[1]), max=log(omegaRange[2])))[mdgsORD]
+
+               } else if (model=="skewgnormal0") {
+
+                   ### Simulate random q values.
+                   ###------------------------------
+                   p0[(3*ncomp+1):(4*ncomp)] <- 
+                   runif(n=ncomp, min=qRange[1], max=qRange[2])
+
+               } # end if.
+
+           } else {
+
+               parsCOL3 <- startPars[,3,drop=TRUE]
+
+               ### Tackle minus values.
+               minmaxv <- t(apply(cbind((1-kkf)*parsCOL3,(1+kkf)*parsCOL3),MARGIN=1,sort))
+               p0[(2*ncomp+1):(3*ncomp)] <- runif(n=ncomp, min=minmaxv[,1], max=minmaxv[,2])         
+
+               ###
+               if (model %in% c("skewnormal0","skewgnormal0")) {
+
+                   parsCOL4 <- startPars[,4,drop=TRUE]
+
+                   ###
+                   p0[(3*ncomp+1):(4*ncomp)] <- 
+                   runif(n=ncomp, min=(1-kkf)*parsCOL4, max=(1+kkf)*parsCOL4)
+
+               } # end if.
+
+           } # end if.
+ 
+           ###
+           p0[1:ncomp] <- 
+           runif(n=ncomp, min=(1-kkf)*mdgs[1:ncomp], max=(1+kkf)*mdgs[1:ncomp])
+
+           ###
+           p0[(ncomp+1):(2*ncomp)] <- 
+           runif(n=ncomp, min=(1-kkf)*mdvp[1:ncomp], max=(1+kkf)*mdvp[1:ncomp])
+
+           ###
+           ### Parameter optimisation using the Levenberg-Marquardt algorithm.
+           ###----------------------------------------------------------------
+           optLM <- try(minpack.lm::nls.lm(par=p0, lower=NULL, upper=NULL, fn=minfn, jac=NULL, 
+                        control=nls.lm.control(maxiter=1024), xd, yd, mdgs, model, minfunc), 
+                        silent=TRUE)
+           ###
+           if (viewLM==TRUE) print(optLM)
+
+           ###
+           if (class(optLM)!="try-error") {
+
+               p <- optLM$par
+
+               ###
+               if (model=="weibull0") {
+
+                   xm0 <- abs(p[1:ncomp]) 
+
+                   ###
+                   idxm1 <- which(xm0<(1-kkf)*mdgs)
+                   xm0[idxm1] <- (1-kkf)*mdgs[idxm1]
+
+                   ###
+                   idxm2 <- which(xm0>(1+kkf)*mdgs)    
+                   xm0[idxm2] <- (1+kkf)*mdgs[idxm2]
+
+                   ###
+                   vm0 <- abs(p[(ncomp+1):(2*ncomp)])
+
+                   ###
+                   alpha0 <- abs(p[(2*ncomp+1):(3*ncomp)])+1
+
+                   ###
+                   beta0 <- xm0/((alpha0-1.0)/alpha0)^(1.0/alpha0) 
+
+                   ###
+                   Mean0 <- beta0*gamma(1+1/alpha0)
+
+                   ###
+                   Median0 <- beta0*(log(2))^(1/alpha0)  
+    
+                   ###
+                   mat0 <- matrix(nrow=nd, ncol=ncomp)
+
+                   ###
+                   for (j in 1:ncomp)  {
+
+                       mat0[,j] <- vm0[j]*(xd/xm0[j])^(alpha0[j]-1)*
+                       exp((alpha0[j]-1)/alpha0[j]*(1-(xd/xm0[j])^alpha0[j]))
+
+                   } # end for.
+
+               } else if (model=="lognormal0") {
+
+                   xm0 <- abs(p[1:ncomp])
+
+                   ###
+                   idxm1 <- which(xm0<(1-kkf)*mdgs)
+                   xm0[idxm1] <- (1-kkf)*mdgs[idxm1]
+
+                   ###
+                   idxm2 <- which(xm0>(1+kkf)*mdgs)    
+                   xm0[idxm2] <- (1+kkf)*mdgs[idxm2]
+
+                   ###
+                   vm0 <- abs(p[(ncomp+1):(2*ncomp)])
+
+                   ###
+                   sigma0 <- abs(p[(2*ncomp+1):(3*ncomp)])+0.001
+
+                   ###
+                   theta0 <- log(xm0)+sigma0^2
+
+                   ###
+                   Mean0 <- exp(theta0+0.5*sigma0^2)
+
+                   ###
+                   Median0 <- exp(theta0)
+
+                   ###
+                   mat0 <- matrix(nrow=nd, ncol=ncomp)
+
+                   ###
+                   for (j in 1:ncomp)  {
+
+                       mat0[,j] <- xm0[j]/xd*vm0[j]*exp(-log(xm0[j]/xd)*
+                       (log(xm0[j]/xd)+2*(sigma0[j])^2)/2/(sigma0[j])^2)
+
+                   } # end for.
+
+               } else if (model=="skewnormal0") {
+
+                   xm0 <- abs(p[1:ncomp])
+
+                   ###
+                   idxm1 <- which(xm0<(1-kkf)*mdgs)
+                   xm0[idxm1] <- (1-kkf)*mdgs[idxm1]
+
+                   ###
+                   idxm2 <- which(xm0>(1+kkf)*mdgs)    
+                   xm0[idxm2] <- (1+kkf)*mdgs[idxm2]
+
+                   ###
+                   vm0 <- abs(p[(ncomp+1):(2*ncomp)])
+
+                   ###
+                   alpha0 <- p[(2*ncomp+1):(3*ncomp)]
+
+                   ###
+                   omega0 <- abs(p[(3*ncomp+1):(4*ncomp)])+0.001
+
+                   ###
+                   delta0 <- alpha0/sqrt(1+(alpha0)^2)
+
+                   ###
+                   v10 <- sqrt(1-2*delta0^2/pi)*(4-pi)/4*
+                   (delta0*sqrt(2/pi))^3/(1-2*delta0^2/pi)^1.5
+
+                   ###
+                   v20 <- sign(alpha0)/2*exp(-2*pi/abs(alpha0))
+
+                   ###
+                   D0 <- omega0*(sqrt(2/pi)*delta0-v10-v20)
+
+                   ###
+                   Mean0 <- xm0-D0+omega0*delta0*sqrt(2/pi)
+
+                   ###
+                   Median0 <- xm0
+
+                   ###
+                   mat0 <- matrix(nrow=nd, ncol=ncomp)
+
+                   ###
+                   for (j in 1:ncomp)  {
+
+                       mat0[,j] <- 
+                       vm0[j]*exp(-(2*D0[j]+xd-xm0[j])*(xd-xm0[j])/2/(omega0[j])^2)*
+                      (1+erf(alpha0[j]*(xd-xm0[j]+D0[j])/sqrt(2)/omega0[j]))/
+                      (1+erf(alpha0[j]*D0[j]/sqrt(2)/omega0[j]))
+
+                   } # end for. 
+
+               } else if (model=="skewgnormal0") {
+
+                   xm0 <- abs(p[1:ncomp])
+
+                   ###
+                   idxm1 <- which(xm0<(1-kkf)*mdgs)
+                   xm0[idxm1] <- (1-kkf)*mdgs[idxm1]
+
+                   ###
+                   idxm2 <- which(xm0>(1+kkf)*mdgs)    
+                   xm0[idxm2] <- (1+kkf)*mdgs[idxm2]
+
+                   ###
+                   vm0 <- abs(p[(ncomp+1):(2*ncomp)])
+
+                   ###
+                   sigma0 <- abs(p[(2*ncomp+1):(3*ncomp)])+0.001
+
+                   ###
+                   qv0 <- abs(p[(3*ncomp+1):(4*ncomp)])+0.001
+                   
+                   ###
+                   pv0 <- 2 + 6*(1-qv0)^5
+
+                   ###
+                   ###x0 <- seq(from=0,to=MAXX/3,by=MAXX/3/300)
+                   x0 <- seq(from=0,to=MAXX/4,by=MAXX/4/200)
+                   
+                   ###
+                   L0 <- vector(length=ncomp)
+
+                   ###
+                   mat0 <- matrix(nrow=nd, ncol=ncomp)
+
+                   ###
+                   for (j in 1:ncomp)  {
+
+                       yf1 <- exp(x0/sigma0[j]*qv0[j])
+                       yf2 <- exp(x0/sigma0[j]/qv0[j])
+
+                       ###
+                       y0 <- abs(yf1*qv0[j]+yf2/qv0[j])/(yf1+yf2)*
+                             exp(-0.5*(abs(log((yf1+yf2)/2)))^pv0[j])
+
+                       ###
+                       if (any(!is.finite(y0)))  { 
+
+                           mat0[,j] <- NA 
+
+                       } else {
+
+                           L0[j] <- x0[which.max(y0)]
+
+                           ###
+                           pf1 <- exp((xd-xm0[j]+L0[j])/sigma0[j]*qv0[j])
+                           pf2 <- exp((xd-xm0[j]+L0[j])/sigma0[j]/qv0[j])
+
+                           ###
+                           pf3 <- exp(L0[j]/sigma0[j]*qv0[j])
+                           pf4 <- exp(L0[j]/sigma0[j]/qv0[j])
+
+                           ###
+                           mat0[,j] <- vm0[j]*abs(pf1*qv0[j]+pf2/qv0[j])*(pf3+pf4)/
+                                              abs(pf3*qv0[j]+pf4/qv0[j])/(pf1+pf2)*
+                                       exp(-0.5*(abs(log((pf1+pf2)/2)))^pv0[j]+
+                                            0.5*(abs(log((pf3+pf4)/2)))^pv0[j])
+                       
+                       } # end if.
+
+                   } # end for.
+
+                   ###
+                   kurt0 <- 2-pv0
+
+                   ###
+                   skew0 <- -6*sign(qv0)*(1-qv0)^2*(1+1.856*kurt0)
+
+                   ###
+                   Mean0 <- xm0-L0+skew0/6*(1+0.856*kurt0)
+
+                   ###
+                   Median0 <- xm0        
+
+               } # end if.
+
+               ###
+               ### Accept the unmixing results of the "trial-and-error" protocol 
+               ### if the following conditions are satisfied.
+               ###------------------------------------------------------------------
+               OOKK <- all(is.finite(mat0)) && 
+                       all(is.finite(Mean0)) && all(Mean0>MINX & Mean0<MAXX) &&
+                       all(is.finite(Median0)) && all(Median0>MINX & Median0<MAXX)
+
+               ###
+               if (OOKK==TRUE)  {
+
+                   acpt <- acpt + 1
+
+                   ###
+                   yd_fit0 <- rowSums(mat0)
+                   fom0 <- sum(abs(yd-yd_fit0))/sum(yd_fit0)*100
+                   rss0 <- sum((yd-yd_fit0)^2)
+
+                   ###
+                   fom0vec <- c(fom0vec, fom0)
+                   rss0vec <- c(rss0vec, rss0)
+
+                   ### Visualise the unmixing results of the "trial-and-error" protocol.
+                   ###------------------------------------------------------------------ 
+                   if (viewFit==TRUE) {
+
+                       mat_vfp <- mat0
+                       mat_vfp <- mat_vfp[,order(xm0),drop=FALSE] 
+
+                       ###
+                       par(mar=c(6,6,5,5)+0.1)
+
+                       ###
+                       plot(origin_xd[reserveidx], yd[reserveidx], type="n", cex.lab=1.5, 
+                            log="x", cex.axis=1.5, mgp=c(2.5, 1, 0), xlab="Grain size (um)", 
+                            ylab="Volume percentage (%)", xaxt="n")
+
+                       ###
+                       box(lwd=2)
+
+                       ###
+                       XaxisCentral <- median(axTicks(side=1))
+
+                       ###
+                       axis(side=1, at=myTK, labels=myLB, cex.axis=1.5)
+
+                       ###
+                       points(origin_xd[reserveidx], yd[reserveidx], type="p",     
+                              lwd=2, pch=21, col="gray50", cex=1.5) 
+
+                       ###
+                       points(origin_xd, rowSums(mat_vfp), col="grey30", type="l", lwd=3.0)
+
+                       ###
+                       for (j in 1:ncomp) {
+
+                           points(origin_xd, mat_vfp[,j], col=lineCol[j], type="l", lwd=3)
+                       
+                       } # end for.
+                          
+                       ###
+                       mypos <- mean(yd[reserveidx][origin_xd[reserveidx]<=XaxisCentral])<
+                                mean(yd[reserveidx][origin_xd[reserveidx]>XaxisCentral]) 
+
+                       ###
+                       legend(ifelse(mypos,"topleft","topright"),
+                              legend=c("Measured","Fitted", paste("Comp.",seq(ncomp),sep=""),
+                              paste("Count:",acpt,sep=""), paste("RSS:",round(rss0,2),sep=""), 
+                              paste("FOM:",round(fom0,2),sep="")), 
+                              col=c("grey50", "grey30", lineCol[seq(ncomp)],NA,NA,NA), 
+                              pch=c(21, rep(NA,ncomp+1),NA,NA,NA), 
+                              lty=c(NA, rep("solid",ncomp+1),NA,NA,NA), 
+                              yjust=2, ncol=1, cex=1, pt.cex=1, bty="o", 
+                              lwd=3.0, pt.bg="white")
+
+                   } # end if. 
+
+                   ###
+                   vxfght <- ifelse(minfunc=="fom", fom0, rss0)            
+
+                   ### Update the optimal results.
+                   if (vxfght<minobj) {
+
+                       xm <- xm0 
+
+                       ###              
+                       vm <- vm0
+
+                       ###
+                       if (model=="weibull0") {
+
+                           alpha <- alpha0
+
+                           ###
+                           beta <- beta0
+
+                       } else if (model=="lognormal0") {
+
+                           sigma <- sigma0
+
+                           ###
+                           theta <- theta0
+                   
+                       } else if (model=="skewnormal0") {
+
+                           alpha <- alpha0
+
+                           ###
+                           omega <- omega0                      
+
+                           ###
+                           delta <- delta0
+ 
+                           ###
+                           D <- D0
+
+                       } else if (model=="skewgnormal0") {
+
+                           sigma <- sigma0
+
+                           ###
+                           qv <- qv0
+
+                           ###
+                           pv <- pv0
+
+                           ###
+                           L <- L0
+
+                           ###
+                           kurt <- kurt0
+
+                           ###
+                           skew <- skew0
+
+                       } # end if.
+
+                       ###
+                       Mean <- Mean0
+                       Median <- Median0
+                       Mode <- xm0
+                       
+                       ###
+                       mat <- mat0
+                       minobj <- vxfght 
+                      
+                       ###
+                       gdcp <- 1 
+                       
+                   } # end if.
+
+               } # end if.
+
+           } # end if.
+
+           ###
+           if (viewLM==FALSE) setTxtProgressBar(pb, i)
+
+       } # end for.
+       ###---------------------------------------------------------------------------------
+    
+       ###
+       if (viewLM==FALSE) close(pb) 
+
+       ###
+       if (gdcp==0) {
+
+           mat <- cbind(origin_xd, yd)
+           rownames(mat) <- NULL
+           colnames(mat) <- c("GSlev","Volume")
+
+           ###
+           output <- list("model"=model, "ncomp"=ncomp, "expGSlev"=expGSlev, 
+                          "reserveidx"=reserveidx, "gs.comp"=mat,
+                          "FOM"=Inf, "RSS"=Inf)
+           class(output) <- "ussgsd"
+
+           ###
+           if (plot==TRUE) {
+
+               plot_ussGSD(output, sampleNO=sampleNO, addvl=addvl, 
+                           lwd=lwd, cex=cex, pch=pch)
+
+           } # end if.
+
+           ###
+           return(invisible(output))
+
+       } # end if.
+
+       ###
+       if (model %in% c("weibull0","lognormal0")) {
+
+           Np <- 3*ncomp
+
+       } else if (model %in% c("skewnormal0","skewgnormal0")) {
+
+           Np <- 4*ncomp
+
+       } # end if.
+
+       ###
+       yd_fit <- rowSums(mat)
+       residuals <- yd-yd_fit
+       fom <- sum(abs(yd-yd_fit))/sum(yd_fit)*100
+       rss <- sum((yd-yd_fit)^2)
+       sst <- sum((yd-mean(yd))^2)
+       R2 <- 1 - rss/sst
+       RSE <- sqrt(rss/(nd-Np))
+
+       ###
+       if (model=="weibull0") {
+
+           coef <- vm*xm/(alpha-1)/exp(-(alpha-1)/alpha)
+
+       } else if (model=="lognormal0") {
+
+           coef <- vm*xm*sqrt(2*pi)*sigma/exp(-0.5*sigma^2)
+
+       } else if (model=="skewnormal0") {
+
+           coef <- 
+           vm*omega*sqrt(2*pi)/exp(-0.5*D^2/omega^2)/(1+erf(alpha*D/sqrt(2)/omega))
+
+       } else if (model=="skewgnormal0") {
+
+           coef <- 
+           vm*2^(1+1/pv)*sigma*gamma(1+1/pv)*(exp(qv*L/sigma)+exp((1/qv)*L/sigma))/    
+           exp(-0.5*(abs(log(0.5*(exp(qv*L/sigma)+exp((1/qv)*L/sigma)))))^pv)/
+           abs(qv*exp(qv*L/sigma)+1/qv*exp((1/qv)*L/sigma))
+
+       } # end if.
+
+       ###
+       prop <- coef/sum(coef)*100
+
+       ### Numerical approximation of the medians.
+       ###-------------------------------------------------
+       if (model %in% c("skewnormal0", "skewgnormal0")) {
+
+           Median <- vector(length=ncomp)
+
+           ###
+           for (j in 1:ncomp) {
+
+               Median[j] <- 
+               approx(x=cumsum(mat[,j]/sum(mat[,j])),y=xd, xout=0.5,ties="ordered")$y
+
+           } # end for.
+
+       } # end if.
+
+       ###
+       gs.pars <- cbind(prop, Mean, Median, Mode)
+       oidx <- order(gs.pars[,4])
+       gs.pars <- gs.pars[oidx,,drop=FALSE]
+
+       ###
+       mat <- mat[,oidx,drop=FALSE]
+       sp <- t(apply(mat, MARGIN=2L, calShape, seq(xd)))
+       rownames(sp) <- paste("Comp.", seq(ncomp), sep="")
+
+       ###
+       if (ncomp>1) {
+
+           resolvec <- name_resolvec <- vector(length=ncomp-1) 
+           deltaHvec <- name_deltaHvec <- vector(length=ncomp-1)
+
+           ###
+           for (i in seq(ncomp-1)) {
+
+               resolvec[i] <- (sp[i+1,3]-sp[i,3])/(sp[i,5]+sp[i+1,4])
+               name_resolvec[i] <- paste("Comp.",i,".",i+1L,sep="")
+
+               ###
+               px12idx <- mat[,i]>0 & mat[,i+1]>0
+               px1 <- mat[px12idx,i]/sum(mat[px12idx,i])
+               px2 <- mat[px12idx,i+1]/sum(mat[px12idx,i+1])
+               px12 <- px1 + px2
+       
+               ###
+               deltaHvec[i] <- (-sum(px12*log2(px12))) - 
+               (-sum(px1*log2(px1))) - (-sum(px2*log2(px2)))
+               name_deltaHvec[i] <- paste("Comp.",i,".",i+1L,sep="")
+
+           } # end for.
+
+           ###
+           names(resolvec) <- name_resolvec
+           names(deltaHvec) <- name_deltaHvec
+
+       } else {
+
+           resolvec <- deltaHvec <- Inf
+
+       } # end if.
+ 
+       ###
+       fit.data <- cbind(xd,yd)
+       rownames(fit.data) <- colnames(fit.data) <- NULL
+       ###
+
+       ###
+       if (model=="weibull0") {
+
+           ###
+           SDp <- sqrt( beta^2*(gamma(1+2/alpha)-(gamma(1+1/alpha))^2) )
+
+           ###
+           fit.pars <- cbind(xm, vm, alpha)
+           colnames(fit.pars) <- c("Xm", "Vm", "Alpha")
+
+       } else if (model=="lognormal0") {
+          
+           ###
+           SDp <- sqrt( (exp(sigma^2)-1)*exp(2*theta+sigma^2) )
+
+           ###
+           fit.pars <- cbind(xm, vm, sigma)
+           colnames(fit.pars) <- c("Xm", "Vm", "Sigma")
+
+       } else if (model=="skewnormal0") {
+
+           ###
+           SDp <- sqrt(omega^2*(1-2*delta^2/pi))
+
+           ###
+           fit.pars <- cbind(xm, vm, alpha, omega)
+           colnames(fit.pars) <- c("Xm", "Vm", "Alpha", "Omega")
+
+       } else if (model=="skewgnormal0") {
+
+           ###
+           SDp <- sqrt(sigma^2*abs((1+1.856*kurt)*(1-abs(skew)/3)))
+
+           ###
+           fit.pars <- cbind(xm, vm, sigma, qv)
+           colnames(fit.pars) <- c("Xm", "Vm", "Sigma", "q")
+
+       } # end if.
+
+       ###
+       fit.pars <- fit.pars[oidx,,drop=FALSE]
+       rownames(fit.pars) <- paste("Comp.", seq(ncomp), sep="")
+
+       ###
+       SDp <- SDp[oidx]
+
+       ###
+       normTEST <- unclass(shapiro.test(x=residuals))
+
+       ###
+       if (useIndex==TRUE) {
+
+           if (expGSlev==TRUE) {
+
+               gs.pars[,2] <- exp(pab[1]+pab[2]*gs.pars[,2])
+               gs.pars[,3] <- exp(pab[1]+pab[2]*gs.pars[,3])
+               gs.pars[,4] <- exp(pab[1]+pab[2]*gs.pars[,4]) 
+
+               ###
+               SDp <-  gs.pars[,2]*pab[2]*SDp      
+
+           } else {
+
+               gs.pars[,2] <- pab[1]+pab[2]*gs.pars[,2]
+               gs.pars[,3] <- pab[1]+pab[2]*gs.pars[,3]
+               gs.pars[,4] <- pab[1]+pab[2]*gs.pars[,4]
+
+               ###
+               SDp <- pab[2]*SDp 
+
+           } # end if.
+
+       } # end if.
+
+       ###
+       gs.pars <- cbind(gs.pars, SDp)
+
+       ###
+       colnames(gs.pars) <- c("Proportion", "Mean", "Median", "Mode", "SD")   
+       rownames(gs.pars) <- paste("Comp.", seq(ncomp), sep="")
+
+       ###
+       ### Implement a recursive unmixing protocol.
+       ###-----------------------------------------------------------------
+       if (trim==TRUE) {
+
+           if (is.null(startPars)) {
+
+               weakPK <- which(peakIDX[,1]<=0)
+
+           } else {
+
+               weakPK <- NA
+
+           } # end if. 
+
+           ###
+           if (all(is.finite(resolvec)) && min(resolvec)<mrsl && 
+               ncomp>1 && length(weakPK)>=1) {
+
+               ncomp <- ncomp - 1
+
+               ###
+               overLAPidx <- which.min(resolvec)
+
+               ###
+               vecxxx <- c(overLAPidx,overLAPidx+1)
+
+               ###
+               leaveCOMPidx <- vecxxx[which.min(gs.pars[vecxxx,1])]
+
+               ### 
+               if (model %in% c("weibull0","lognormal0")) {
+          
+                   startPars <- cbind(gs.pars[,4], fit.pars[,2:3])
+
+               } else if (model %in% c("skewnormal0","skewgnormal0")) {
+
+                   startPars <- cbind(gs.pars[,4], fit.pars[,2:4])
+
+               } # end if.
+
+               ###
+               startPars <- startPars[-leaveCOMPidx,,drop=FALSE]
+
+               ### 
+               recursiveFIT <- ussGSD0(gsl=gsl, gsd=gsd, ncomp=ncomp, 
+                 auto=auto, model=model, mpd=mpd, ctf=ctf, ntry=ntry, 
+                 kkf=kkf, startPars=startPars, alphaRange=alphaRange, 
+                 sigmaRange=sigmaRange, useIndex=useIndex, minfunc=minfunc, 
+                 trim=trim, mrsl=mrsl, viewAutoInis=viewAutoInis, viewLM=viewLM, 
+                 viewFit=viewFit, outfile=outfile, plot=plot, rmZero=rmZero, 
+                 sampleNO=sampleNO, addvl=addvl, logxy=logxy, lwd=lwd, pch=pch, 
+                 cex=cex)
+
+               ###
+               return(invisible(recursiveFIT))
+      
+           } # end if.
+
+       } # end if.
+
+       ###
+       tmdxv <- gs.pars[,4]
+       names(tmdxv) <- NULL
+       tmdyv <- vector(length=ncomp)
+
+       ###     
+       for (i in seq(ncomp))  {
+
+           tmdyv[i] <- approx(x=origin_xd, y=mat[,i], xout=tmdxv[i])$y
+
+       } # end for. 
+
+       ###
+       mat <- cbind(origin_xd, yd, yd_fit, mat)
+       rownames(mat) <- NULL
+       colnames(mat) <- c("GSlev","Volume","Fit.Volume",paste("Comp.", seq(ncomp), sep=""))
+
+       ###
+       if (!is.null(outfile)) { 
+
+           write.csv(mat, file=paste(outfile, ".csv", sep = ""))
+
+       } # end if.
+
+       ###
+       output <- list("model"=model, "ncomp"=ncomp, "expGSlev"=expGSlev, "reserveidx"=reserveidx,
+                      "fit.data"=fit.data, "fit.pars"=fit.pars, "normTest"=normTEST, "FOMs"=fom0vec, 
+                      "RSSs"=rss0vec, "acpt"=acpt, "gs.comp"=mat, "mdxv"=tmdxv, "mdyv"=tmdyv, 
+                      "residuals"=residuals, "gs.pars"=gs.pars, "sp"=sp, "resolution"=resolvec, 
+                      "deltaH"=deltaHvec, "FOM"=fom, "RSS"=rss, "R2"=R2, "RSE"=RSE)
+
+       ###
+       class(output) <- "ussgsd"
+
+       ###
+       if (plot==TRUE) {
+
+           plot_ussGSD(obj_ussgsd=output, sampleNO=sampleNO, addvl=addvl, 
+                       logxy=logxy, lwd=lwd, cex=cex, pch=pch)
+
+       } # end if.
+
+       ###
+       invisible(output)
+
+  } # end function ussGSD0.
+  ###==========================================================================================================================
+  ###
+  
   
   ###
   ###***********************************************************************************
-  ### The user may also need to install and load the following external R package 
-  ### if want to perform a parallel unmixing of grain-size distributions in a batch 
+  ### Users may also need to install and load the following external R package 
+  ### if they want to perform a parallel unmixing of grain-size distributions in a batch 
   ### pattern using the following R functions update_ussGSDbatchp() or ussGSDbatchp().
   ###===================================================================================
   library(parallel)
@@ -3346,9 +4879,10 @@
   ###         auto: A logical value indicating whether performing a automatic grain-size unmixing, 
   ###               in this case the user needs not to specify the initials used for optimisation.
   ###
-  ###        model: A character indicating the model to be fitted, "weibull", or "lognormal".
+  ###        model: A character indicating the model to be fitted, "weibull", "lognormal",
+  ###               "weibull0", "lognormal0", "skewnormal0", or "skewgnormal0".
   ###               if model=NULL, the program will automatically determine the optimal model 
-  ###               which yields a smaller FOM or RSS value.
+  ###               (between "weibull" and "lognormal") which yields a smaller FOM or RSS value.
   ###
   ###          mpd: An integer indicating the minimum distance (in indices) of peaks to be identified.
   ###
@@ -3365,16 +4899,38 @@
   ###          kkf: A numeric value controlling the range of values from which random starting   
   ###               parameters will be generated during the "trial-and-error" protocol.
   ###
-  ###    startPars: A two-row matrix containing starting parameters used for unmixing, the first
-  ###               row contains the modes of individual components, and the second row contains
-  ###               the alpha (Weibull distribution) or sigma (Lognormal distribution) value of 
-  ###               individual components.
+  ###    startPars: if model="weibull" or "lognormal", [startPars] should be a two-column matrix 
+  ###               containing starting parameters used for unmixing, the first column contains 
+  ###               the modes of individual components, and the second row contains the alpha 
+  ###               ("weibull") or sigma ("lognormal") value of individual components.
   ###
-  ###   alphaRange: A two-element vector indicating the lower and upper limits on alpha values  
-  ###               of a Weibull distribution generated from a Uniform distribution.
+  ###               if model="weibull0" or "lognormal0", [startPars] should be a three-column 
+  ###               matrix containing starting parameters used for unmixing, the first column  
+  ###               contains the modes of individual components, the second column contains the 
+  ###               maximum volume percentages of individual components, and the thrid column 
+  ###               contains the alpha ("weibull0") or sigma ("lognormal0") value of individual 
+  ###               components.
+  ###
+  ###               if model="skewnormal0" or "skewgnormal0", [startPars] should be a four-column 
+  ###               matrix containing starting parameters used for unmixing, the first column is
+  ###               the modes of individual components, the second column is the maximum volume
+  ###               percentages of individual components,the thrid and fourth columns are the
+  ###               alpha and omega values ("skewnormal0") or sigma and q values ("skewgnormal0") 
+  ###               of individual components.  
+  ###
+  ###   alphaRange: A two-element vector indicating the lower and upper limits on alpha values of 
+  ###               the Weibull ("weibull" or "weibull0") or Skew Normal ("skewnormal0") distributions 
+  ###               generated from a Uniform distribution.
   ###
   ###   sigmaRange: A two-element vector indicating the lower and upper limits on sigma values 
-  ###               of a Lognormal distribution generated from a Uniform distribution.
+  ###               of the Lognormal ("lognormal" or "lognormal0") or Skewed Generalized Normal 
+  ###              ("skewgnormal0") distributions generated from a Uniform distribution.  
+  ###
+  ###   omegaRange: A two-element vector indicating the lower and upper limits on omega values of 
+  ###               a Skew Normal ("skewnormal0") distribution generated from a Uniform distribution.
+  ###
+  ###       qRange: A two-element vector indicating the lower and upper limits on q values of a Skewed 
+  ###               Generalized Normal ("skewgnormal0") distribution generated from a Uniform distribution. 
   ###
   ###     useIndex: A logical value indicating whether the index of a grain-size level will be  
   ###               used as the x-coordinate during the unmixing process.
@@ -3398,20 +4954,21 @@
   ###               the loaded RDdata file in the current directory.
   ###==========================================================================================================================
   ### The function
-  ### (1) Returns a invisible list of S3 class of "batchgsd" containing the unmixed results  
-  ###     of individual samples.
+  ### (1) Returns a invisible list of S3 class of "batchgsd" containing   
+  ###     the unmixed results of individual samples.
   ###
   ### (2) Re-write the loaded RData file containing the updated unmixed results 
   ###     in the current working directory if obj_batchgsd=NULL and saveRD=TRUE.
   ###
   ### Note that if obj_batchgsd=NULL, the user needs to ensure that the function load_ussGSDbatch() 
-  ### has been called and an object R "GSDbatch" has been loaded from the RData file which is 
-  ### available in the current working directory.
+  ### has been called and an object R "GSDbatch" has been loaded from an RData file  
+  ### (e.g., "GSDbatch.RData") which is available in the current working directory.
   ###==========================================================================================================================
   update_ussGSDbatchp <- function(obj_batchgsd=NULL, sampleNO, ncomp=NULL, auto=TRUE, model="weibull", 
                                   mpd=6, ctf=0.1, ntry=100, kkf=0.1, startPars=NULL, alphaRange=NULL, 
-                                  sigmaRange=NULL, useIndex=TRUE, minfunc="fom", trim=FALSE, mrsl=0.6, 
-                                  ncr=NULL, rmZero=TRUE, saveRD=TRUE) {
+                                  sigmaRange=NULL, omegaRange=NULL, qRange=NULL, useIndex=TRUE, 
+                                  minfunc="fom", trim=FALSE, mrsl=0.6, ncr=NULL, rmZero=TRUE, 
+                                  saveRD=TRUE) {
 
       if (!is.null(obj_batchgsd)) {
 
@@ -3498,23 +5055,36 @@
       ###-------------------------------------------------------------------------------------
       updateGSDbatch <- foreach::foreach(kk=1:N, .inorder=TRUE, .options.snow=opts, 
                                          .packages=c("pracma","tgcd","minpack.lm"), 
-                                         .export="ussGSD", .verbose=FALSE) %dopar% {
+                                         .export=c("ussGSD","ussGSD0"), 
+                                         .verbose=FALSE) %dopar% {
 
           ###
           gsl <- GSDbatch[[sampleNO[kk]]]$gs.comp[,1]
           gsd <- GSDbatch[[sampleNO[kk]]]$gs.comp[,2]
-          expGSlev <- GSDbatch[[sampleNO[kk]]]$expGSlev
 
           ###
           if (!is.null(model)) {
 
-              res_ussGSD <- try(ussGSD(gsl=gsl, gsd=gsd, ncomp=ncomp, expGSlev=expGSlev,   
-                                       auto=auto, model=model, mpd=mpd, ctf=ctf, ntry=ntry, 
-                                       kkf=kkf, startPars=startPars, alphaRange=alphaRange, 
-                                       sigmaRange=sigmaRange, useIndex=useIndex, minfunc=minfunc, 
-                                       trim=trim, mrsl=mrsl, viewAutoInis=FALSE, viewLM=FALSE, 
-                                       viewFit=FALSE, outfile=NULL, rmZero=rmZero, plot=FALSE), 
-                                       silent=TRUE)
+              if (model %in% c("weibull","lognormal")) {
+
+                  res_ussGSD <- try(ussGSD(gsl=gsl, gsd=gsd, ncomp=ncomp,    
+                    auto=auto, model=model, mpd=mpd, ctf=ctf, ntry=ntry, kkf=kkf,
+                    startPars=startPars, alphaRange=alphaRange, sigmaRange=sigmaRange,
+                    useIndex=useIndex, minfunc=minfunc, trim=trim, mrsl=mrsl,
+                    viewAutoInis=FALSE, viewLM=FALSE, viewFit=FALSE, outfile=NULL, 
+                    rmZero=rmZero, plot=FALSE), silent=TRUE)
+
+              } else if (model %in% c("weibull0", "lognormal0",
+                                      "skewnormal0", "skewgnormal0")) {
+
+                  res_ussGSD <- try(ussGSD0(gsl=gsl, gsd=gsd, ncomp=ncomp,    
+                    auto=auto, model=model, mpd=mpd, ctf=ctf, ntry=ntry, kkf=kkf,
+                    startPars=startPars, alphaRange=alphaRange, sigmaRange=sigmaRange,
+                    omegaRange=omegaRange, qRange=qRange, useIndex=useIndex, minfunc=minfunc, 
+                    trim=trim, mrsl=mrsl, viewAutoInis=FALSE, viewLM=FALSE, viewFit=FALSE, 
+                    outfile=NULL, rmZero=rmZero, plot=FALSE), silent=TRUE)
+
+              } # end if.
     
               ###
               if (class(res_ussGSD)!="try-error") { 
@@ -3529,22 +5099,22 @@
 
           } else {
 
-              res_ussGSDwb <- try(ussGSD(gsl=gsl, gsd=gsd, ncomp=ncomp, expGSlev=expGSlev,   
-                                         auto=auto, model="weibull", mpd=mpd, ctf=ctf, ntry=ntry, 
-                                         kkf=kkf, startPars=startPars, alphaRange=alphaRange, 
-                                         sigmaRange=sigmaRange, useIndex=useIndex, minfunc=minfunc, 
-                                         trim=trim, mrsl=mrsl, viewAutoInis=FALSE, viewLM=FALSE, 
-                                         viewFit=FALSE, outfile=NULL, rmZero=rmZero, plot=FALSE), 
-                                         silent=TRUE)
+              res_ussGSDwb <- try(ussGSD(gsl=gsl, gsd=gsd, ncomp=ncomp,    
+                auto=auto, model="weibull", mpd=mpd, ctf=ctf, ntry=ntry, 
+                kkf=kkf, startPars=startPars, alphaRange=alphaRange, 
+                sigmaRange=sigmaRange, useIndex=useIndex, minfunc=minfunc, 
+                trim=trim, mrsl=mrsl, viewAutoInis=FALSE, viewLM=FALSE, 
+                viewFit=FALSE, outfile=NULL, rmZero=rmZero, plot=FALSE), 
+                silent=TRUE)
 
               ###
-              res_ussGSDlg <- try(ussGSD(gsl=gsl, gsd=gsd, ncomp=ncomp, expGSlev=expGSlev,   
-                                         auto=auto, model="lognormal", mpd=mpd, ctf=ctf, ntry=ntry, 
-                                         kkf=kkf, startPars=startPars, alphaRange=alphaRange, 
-                                         sigmaRange=sigmaRange, useIndex=useIndex, minfunc=minfunc, 
-                                         trim=trim, mrsl=mrsl, viewAutoInis=FALSE, viewLM=FALSE, 
-                                         viewFit=FALSE, outfile=NULL, rmZero=rmZero, plot=FALSE), 
-                                         silent=TRUE)
+              res_ussGSDlg <- try(ussGSD(gsl=gsl, gsd=gsd, ncomp=ncomp,  
+                auto=auto, model="lognormal", mpd=mpd, ctf=ctf, ntry=ntry, 
+                kkf=kkf, startPars=startPars, alphaRange=alphaRange, 
+                sigmaRange=sigmaRange, useIndex=useIndex, minfunc=minfunc, 
+                trim=trim, mrsl=mrsl, viewAutoInis=FALSE, viewLM=FALSE, 
+                viewFit=FALSE, outfile=NULL, rmZero=rmZero, plot=FALSE), 
+                silent=TRUE)
 
               ###
               if (class(res_ussGSDwb)!="try-error" && class(res_ussGSDlg)!="try-error") {
@@ -3554,7 +5124,7 @@
                       minfuncVAL1 <- res_ussGSDwb$FOM
                       minfuncVAL2 <- res_ussGSDlg$FOM
 
-                  } else {
+                  } else if (minfunc=="rss") {
 
                       minfuncVAL1 <- res_ussGSDwb$RSS
                       minfuncVAL2 <- res_ussGSDlg$RSS
@@ -3640,12 +5210,10 @@
   ###
   ###     ncomp: An integer (from 1 to 13) indicating the number of components to be fitted. 
   ###
-  ###  expGSlev: A logical value indicating whether the grain-size level [gsl] is of 
-  ###            exponential scale.
-  ###
-  ###     model: A character indicating the model to be fitted, "weibull", or "lognormal".
+  ###     model: A character indicating the model to be fitted, "weibull", "lognormal",
+  ###            "weibull0", "lognormal0", "skewnormal0", or "skewgnormal0".
   ###            if model=NULL, the program will automatically determine the optimal model 
-  ###            which yields a smaller FOM or RSS value.
+  ###            (between "weibull" and "lognormal") which yields a smaller FOM or RSS value.
   ###
   ###       mpd: An integer indicating the minimum distance (in indices) of peaks to be identified.
   ###
@@ -3662,16 +5230,38 @@
   ###       kkf: A numeric value controlling the range of values from which random starting   
   ###            parameters will be generated during the "trial-and-error" protocol.
   ###
-  ### startPars: A two-row matrix containing starting parameters used for unmixing, the first
-  ###            row contains the modes of individual components, and the second row contains
-  ###            the alpha (Weibull distribution) or sigma (Lognormal distribution) value of 
-  ###            individual components.
+  ### startPars: if model="weibull" or "lognormal", [startPars] should be a two-column matrix 
+  ###            containing starting parameters used for unmixing, the first column contains 
+  ###            the modes of individual components, and the second row contains the alpha 
+  ###            ("weibull") or sigma ("lognormal") value of individual components.
+  ###
+  ###            if model="weibull0" or "lognormal0", [startPars] should be a three-column 
+  ###            matrix containing starting parameters used for unmixing, the first column  
+  ###            contains the modes of individual components, the second column contains the 
+  ###            maximum volume percentages of individual components, and the thrid column 
+  ###            contains the alpha ("weibull0") or sigma ("lognormal0") value of individual 
+  ###            components.
+  ###
+  ###            if model="skewnormal0" or "skewgnormal0", [startPars] should be a four-column 
+  ###            matrix containing starting parameters used for unmixing, the first column is
+  ###            the modes of individual components, the second column is the maximum volume
+  ###            percentages of individual components,the thrid and fourth columns are the
+  ###            alpha and omega values ("skewnormal0") or sigma and q values ("skewgnormal0") 
+  ###            of individual components.  
   ###
   ###alphaRange: A two-element vector indicating the lower and upper limits on alpha values of 
-  ###            a Weibull distribution generated from a Uniform distribution.
+  ###            the Weibull ("weibull" or "weibull0") or Skew Normal ("skewnormal0") distributions 
+  ###            generated from a Uniform distribution.
   ###
-  ###sigmaRange: A two-element vector indicating the lower and upper limits on sigma values of
-  ###            a Lognormal distribution generated from a Uniform distribution.
+  ###sigmaRange: A two-element vector indicating the lower and upper limits on sigma values 
+  ###            of the Lognormal ("lognormal" or "lognormal0") or Skewed Generalized Normal 
+  ###           ("skewgnormal0") distributions generated from a Uniform distribution.  
+  ###
+  ###omegaRange: A two-element vector indicating the lower and upper limits on omega values of 
+  ###            a Skew Normal ("skewnormal0") distribution generated from a Uniform distribution.
+  ###
+  ###    qRange: A two-element vector indicating the lower and upper limits on q values of a Skewed 
+  ###            Generalized Normal ("skewgnormal0") distribution generated from a Uniform distribution.
   ###
   ###  useIndex: A logical value indicating whether the index of a grain-size level will be  
   ###            used as the x-coordinate during the fitting process.
@@ -3720,11 +5310,11 @@
   ### (3) Generates a RData file named "ussGSDbatch" ("or_a_different_name") containing the unmixed  
   ###     results in the current working directory if rdname="ussGSDbatch" ("or_a_different_name").
   ###==========================================================================================================================
-  ussGSDbatchp <- function(GSDmat, ncomp=NULL, expGSlev=TRUE, model="weibull", mpd=6, ctf=0.1, 
-                           ntry=100, kkf=0.1, startPars=NULL, alphaRange=NULL, sigmaRange=NULL, 
-                           useIndex=TRUE, minfunc="fom", trim=FALSE, mrsl=0.6, ncr=NULL, rmZero=TRUE,   
-                           pdfname="ussGSDbatch", addvl=TRUE, logxy="x", lwd=3, pch=21, cex=2, 
-                           rdname="ussGSDbatch") {
+  ussGSDbatchp <- function(GSDmat, ncomp=NULL, model="weibull", mpd=6, ctf=0.1, ntry=100, kkf=0.1, 
+                           startPars=NULL, alphaRange=NULL, sigmaRange=NULL, omegaRange=NULL, 
+                           qRange=NULL, useIndex=TRUE, minfunc="fom", trim=FALSE, mrsl=0.6, 
+                           ncr=NULL, rmZero=TRUE, pdfname="ussGSDbatch", addvl=TRUE, 
+                           logxy="x", lwd=3, pch=21, cex=2, rdname="ussGSDbatch") {
 
       GSDmat <- as.matrix(GSDmat)
       if(nrow(GSDmat)<2) 
@@ -3793,18 +5383,32 @@
       ###-------------------------------------------------------------------------------------
       GSDbatch <- foreach::foreach(kk=1:N, .inorder=TRUE, .options.snow=opts, 
                                    .packages=c("pracma","tgcd","minpack.lm"), 
-                                   .export="ussGSD", .verbose=FALSE) %dopar% {    
+                                   .export=c("ussGSD","ussGSD0"), 
+                                   .verbose=FALSE) %dopar% {    
 
           ###
           if (!is.null(model)) {
 
-              res_ussGSD <- try(ussGSD(gsl=gsl, gsd=GSD[kk,], ncomp=ncomp, expGSlev=expGSlev, 
-                                       auto=TRUE, model=model, mpd=mpd, ctf=ctf, ntry=ntry, 
-                                       kkf=kkf, startPars=startPars, alphaRange=alphaRange, 
-                                       sigmaRange=sigmaRange, useIndex=useIndex, minfunc=minfunc, 
-                                       trim=trim, mrsl=mrsl, viewAutoInis=FALSE, viewLM=FALSE, 
-                                       viewFit=FALSE, outfile=NULL, rmZero=rmZero, plot=FALSE), 
-                                       silent=TRUE)
+              if (model %in% c("weibull","lognormal")) {
+
+                  res_ussGSD <- try(ussGSD(gsl=gsl, gsd=GSD[kk,], ncomp=ncomp, 
+                    auto=TRUE, model=model, mpd=mpd, ctf=ctf, ntry=ntry, kkf=kkf,
+                    startPars=startPars, alphaRange=alphaRange, sigmaRange=sigmaRange,
+                    useIndex=useIndex, minfunc=minfunc, trim=trim, mrsl=mrsl,
+                    viewAutoInis=FALSE, viewLM=FALSE, viewFit=FALSE, outfile=NULL, 
+                    rmZero=rmZero, plot=FALSE), silent=TRUE)
+
+              } else if (model %in% c("weibull0", "lognormal0",
+                                      "skewnormal0", "skewgnormal0")) {
+
+                  res_ussGSD <- try(ussGSD0(gsl=gsl, gsd=GSD[kk,], ncomp=ncomp,  
+                    auto=TRUE, model=model, mpd=mpd, ctf=ctf, ntry=ntry, kkf=kkf,
+                    startPars=startPars, alphaRange=alphaRange, sigmaRange=sigmaRange,
+                    omegaRange=omegaRange, qRange=qRange, useIndex=useIndex, minfunc=minfunc,
+                    trim=trim, mrsl=mrsl, viewAutoInis=FALSE, viewLM=FALSE, viewFit=FALSE, 
+                    outfile=NULL, rmZero=rmZero, plot=FALSE), silent=TRUE)
+
+              } # end if.
 
               ###
               if (class(res_ussGSD)!="try-error") { 
@@ -3819,22 +5423,20 @@
 
           } else {
 
-              res_ussGSDwb <- try(ussGSD(gsl=gsl, gsd=GSD[kk,], ncomp=ncomp, expGSlev=expGSlev, 
-                                         auto=TRUE, model="weibull", mpd=mpd, ctf=ctf, ntry=ntry, 
-                                         kkf=kkf, startPars=startPars, alphaRange=alphaRange, 
-                                         sigmaRange=sigmaRange, useIndex=useIndex, minfunc=minfunc, 
-                                         trim=trim, mrsl=mrsl, viewAutoInis=FALSE, viewLM=FALSE, 
-                                         viewFit=FALSE, outfile=NULL, rmZero=rmZero, plot=FALSE), 
-                                         silent=TRUE)
+              res_ussGSDwb <- try(ussGSD(gsl=gsl, gsd=GSD[kk,], ncomp=ncomp, 
+                auto=TRUE, model="weibull", mpd=mpd, ctf=ctf, ntry=ntry, kkf=kkf,
+                startPars=startPars, alphaRange=alphaRange, sigmaRange=sigmaRange, 
+                useIndex=useIndex, minfunc=minfunc, trim=trim, mrsl=mrsl, 
+                viewAutoInis=FALSE, viewLM=FALSE, viewFit=FALSE, outfile=NULL, 
+                rmZero=rmZero, plot=FALSE), silent=TRUE)
 
               ###
-              res_ussGSDlg <- try(ussGSD(gsl=gsl, gsd=GSD[kk,], ncomp=ncomp, expGSlev=expGSlev, 
-                                         auto=TRUE, model="lognormal", mpd=mpd, ctf=ctf, ntry=ntry, 
-                                         kkf=kkf, startPars=startPars, alphaRange=alphaRange, 
-                                         sigmaRange=sigmaRange, useIndex=useIndex, minfunc=minfunc, 
-                                         trim=trim, mrsl=mrsl, viewAutoInis=FALSE, viewLM=FALSE, 
-                                         viewFit=FALSE, outfile=NULL, rmZero=rmZero, plot=FALSE), 
-                                         silent=TRUE)
+              res_ussGSDlg <- try(ussGSD(gsl=gsl, gsd=GSD[kk,], ncomp=ncomp,  
+                auto=TRUE, model="lognormal", mpd=mpd, ctf=ctf, ntry=ntry, kkf=kkf,
+                startPars=startPars, alphaRange=alphaRange, sigmaRange=sigmaRange,
+                useIndex=useIndex, minfunc=minfunc, trim=trim, mrsl=mrsl,
+                viewAutoInis=FALSE, viewLM=FALSE, viewFit=FALSE, outfile=NULL, 
+                rmZero=rmZero, plot=FALSE), silent=TRUE)
 
               ###
               if (class(res_ussGSDwb)!="try-error" && class(res_ussGSDlg)!="try-error") {
@@ -3844,7 +5446,7 @@
                       minfuncVAL1 <- res_ussGSDwb$FOM
                       minfuncVAL2 <- res_ussGSDlg$FOM
 
-                  } else {
+                  } else if (minfunc=="rss") {
 
                       minfuncVAL1 <- res_ussGSDwb$RSS
                       minfuncVAL2 <- res_ussGSDlg$RSS
