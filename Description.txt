@@ -1,5 +1,4 @@
 
-
     #
     (1) ussGSD.txt                  # A text file containing the R functions.
 
@@ -7,6 +6,5 @@
 
     (3) GrainSizeData.txt           # A text file containing the grain-size dataset.
 
-    (4) ussGSDbatch0.RData          # An output RData file containing the unmixed results.
-    
+    (4) ussGSDbatch0.RData          # An output RData file containing the unmixed results. 
     #
