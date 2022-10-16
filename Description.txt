@@ -1,12 +1,14 @@
 
     #
-    (1) ussGSD.txt                  # A text file containing the R functions.
+    (1) ussGSD.txt                  # A text file containing the R functions used for single-sample unmixing.
 
-    (2) ussGSD_Examples.txt         # A text file demonstrating applications of the R functions.
+    (2) ussGSD_Examples.txt         # A text file demonstrating applications of the R functions used for single-sample unmixing.
 
     (3) GrainSizeData.txt           # A text file containing the grain-size dataset.
 
-    (4) ussGSDbatch0.RData          # An output RData file containing the unmixed results. 
+    (4) ussGSDbatch0.RData          # An output RData file containing the single-sample unmixing results. 
     
     (5) PEMM.txt                    # A text file containing the R functions used for parametric end-member modelling.
+    
+    (6) PEMM_Examples.txt           # A text file demonstrating applications of the R functions used for parametric end-member modelling.
     #
