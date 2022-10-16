@@ -1,11 +1,11 @@
 
   ###
   ###**************************************************************************************************************************
-  ### R program ussGSD (v2.0).
+  ### R program ussGSD (v2.1).
   ###**************************************************************************************************************************
   ### Methods and open source R code for efficient and flexible unmixing of single-sample grain-size distributions.
   ### Author: Jun Peng, Hunan University of Science and Technology, China. 
-  ### Last updated, 2022.07.03.
+  ### Last updated, 2022.10.16.
   ### 
   ### Note that the current version of the program is developed for unmixing of
   ### single-sample grain-size distributions measured using the Malvern Mastersizer-2000/3000
@@ -503,8 +503,8 @@
           ###
           for (i in 1:nkm) {
 
-              XV <- kDDD[KM$cluster==i]
-              YV <- abundance[KM$cluster==i]
+              XV <- kDDD[KM$cluster==odrgXV[i]]
+              YV <- abundance[KM$cluster==odrgXV[i]]
 
               ###
               xxv <- range(XV)
@@ -520,8 +520,8 @@
           ###
           for (i in 1:nkm) {
 
-              XV <- kDDD[KM$cluster==i]
-              YV <- abundance[KM$cluster==i]
+              XV <- kDDD[KM$cluster==odrgXV[i]]
+              YV <- abundance[KM$cluster==odrgXV[i]]
 
               ###
               points(x=XV, y=YV, col=colvec[i], bg=colvec[i], pch=21, cex=1)
@@ -542,7 +542,7 @@
 
           ###
           legend(ifelse(logx,"topleft","topright"), legend=paste("Cluster ",1:nkm,sep=""), 
-                 pch=21, col=colvec[1:nkm][odrgXV], pt.bg=colvec[1:nkm][odrgXV], bty="n")
+                 pch=21, col=colvec[1:nkm], pt.bg=colvec[1:nkm], bty="n")
 
           ###
           if (k==1) medianKM <- KM$cluster
