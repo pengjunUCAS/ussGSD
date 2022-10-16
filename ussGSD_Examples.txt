@@ -484,34 +484,34 @@
     ### Parallel unmixing of a number of single-sample grain-size distributions in a batch pattern.
     ###--------------------------------------------------------------------------------------------------
     ### Use function ussGSDbatch() instead if parallel calculation cannot be supported.  
-    USSbatch0 <- ussGSDbatchp(DAT, model=NULL, trim=TRUE, mrsl=0.71, 
-                              pdfname="ussGSDbatch0",rdname="ussGSDbatch0") 
+    USSbatch1 <- ussGSDbatchp(DAT, model=NULL, trim=TRUE, mrsl=0.71, 
+                              pdfname="ussGSDbatch1",rdname="ussGSDbatch1") 
 
     ###
     ### Access the unmixing results of the sixth sample.
     ###--------------------------------------------------------------------------------------------------
-    USSbatch0$NO6
+    USSbatch1$NO6
 
     ###
     ### Access the shape parameters of the sixth sample.
     ###--------------------------------------------------------------------------------------------------
-    USSbatch0$NO6$sp
+    USSbatch1$NO6$sp
 
     ###
     ### Visualise the unmixing results of the 20th sample.
     ###--------------------------------------------------------------------------------------------------
-    plot_ussGSD(USSbatch0$NO20)
+    plot_ussGSD(USSbatch1$NO20)
 
     ###
     ### Find the number of grain-size distributions that have FOM values larger than 4. 
     ###--------------------------------------------------------------------------------------------------
-    largeFOMidx <- sapply(USSbatch0, function(x) !is.null(x) && is.finite(x$FOM) && x$FOM>4)
-    seq(length(USSbatch0))[largeFOMidx]
+    largeFOMidx <- sapply(USSbatch1, function(x) !is.null(x) && is.finite(x$FOM) && x$FOM>4)
+    seq(length(USSbatch1))[largeFOMidx]
 
     ###
     ### Load the above unmixed results (USSbatch1).
     ###--------------------------------------------------------------------------------------------------
-    load_ussGSDbatch(rdname="ussGSDbatch0")
+    load_ussGSDbatch(rdname="ussGSDbatch1")
 
     ###
     ### Successively update unmixing results stored in the file "ussGSDbatch1.RData".
