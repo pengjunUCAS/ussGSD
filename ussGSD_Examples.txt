@@ -617,3 +617,46 @@
     summary_ussGSDbatch(nkm=6, csv=TRUE) 
     #####################################################################################################
     ### END TEMPLATE-4.
+    
+    
+    #######################################################################################################################################
+    ################################ TEMPLATE-5.###########################################################################################
+    #######################################################################################################################################
+    rm(list=ls())
+    ### Load the R program ussGSD.
+    ###--------------------------------------------------------------------------------------------------
+    source("ussGSD.txt")
+   
+    ###
+    ### Read the grain-size dataset used for unmixing.
+    ###--------------------------------------------------------------------------------------------------
+    DAT <- read.table("GrainSizeData.txt")
+
+    ###
+    ### Automatic unmixing of a single-sample grain-size 
+    ### distribution using transformed Skew Normal distributions.
+    ###--------------------------------------------------------------------------------------------------
+    USS1 <- ussGSD0(gsl=DAT[1,], gsd=DAT[2,], auto=TRUE, model="skewnormal0", viewFit=TRUE)
+    
+    names(USS1)
+    USS1$FOM
+    
+    plot(USS1)
+    
+    ###
+    ### Automatic unmixing of a single-sample grain-size 
+    ### distribution using transformed Skewed Generalized Normal distributions.
+    ###--------------------------------------------------------------------------------------------------
+    USS2 <- ussGSD0(gsl=DAT[1,], gsd=DAT[2,], auto=TRUE, model="skewgnormal0", viewFit=TRUE)
+    
+    USS2$FOM
+    
+    ###
+    ### Parallel unmixing of a number of single-sample grain-size distributions in a batch pattern
+    ### using transformed Skew Normal distributions.
+    ###--------------------------------------------------------------------------------------------------
+    ### Use function ussGSDbatch() instead if parallel calculation cannot be supported.  
+    USSbatch1 <- ussGSDbatchp(DAT, model="skewnormal0", trim=TRUE, mrsl=0.71, 
+                              pdfname="ussGSDbatch1",rdname="ussGSDbatch1")                             
+    #####################################################################################################
+    ### END TEMPLATE-5.
