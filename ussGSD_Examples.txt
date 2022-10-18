@@ -641,7 +641,7 @@
     names(USS1)
     USS1$FOM
     
-    plot(USS1)
+    plot_ussGSD(USS1)
     
     ###
     ### Automatic unmixing of a single-sample grain-size 
