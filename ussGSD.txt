@@ -5,7 +5,7 @@
   ###**************************************************************************************************************************
   ### Methods and open source R code for efficient and flexible unmixing of single-sample grain-size distributions.
   ### Author: Jun Peng, Hunan University of Science and Technology, China. 
-  ### Last updated, 2022.10.16.
+  ### Last updated, 2022.10.18.
   ### 
   ### Note that the current version of the program is developed for unmixing of
   ### single-sample grain-size distributions measured using the Malvern Mastersizer-2000/3000
@@ -2084,7 +2084,8 @@
 
         ### Check if the grain size levels are of log-scale.
         xd0xd0 <- round(diff(log(as.numeric(origin_xd))),2)
-        expGSlev <- ifelse(all(xd0xd0==xd0xd0[1]), TRUE, FALSE)
+        YESORNO <- all(xd0xd0==xd0xd0[1]) || all(xd0xd0 %% xd0xd0[1]==0)
+        expGSlev <- ifelse(YESORNO, TRUE, FALSE)
 
         ###
         nd <- length(yd)     
@@ -3364,7 +3365,8 @@
         ###
         ### Check if the grain size levels are of log-scale.
         xd0xd0 <- round(diff(log(as.numeric(origin_xd))),2)
-        expGSlev <- ifelse(all(xd0xd0==xd0xd0[1]), TRUE, FALSE)
+        YESORNO <- all(xd0xd0==xd0xd0[1]) || all(xd0xd0 %% xd0xd0[1]==0)
+        expGSlev <- ifelse(YESORNO, TRUE, FALSE)
 
         ###
         nd <- length(yd)     
