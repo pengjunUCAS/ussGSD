@@ -1157,13 +1157,35 @@
 
       ###
       xd <- as.numeric(GSDmat[1,])
+      
+      ### Check if the grain size levels are of log-scale.
+      xd0xd0 <- round(diff(log(as.numeric(xd))),2)
+      YESORNO <- all(xd0xd0==min(xd0xd0)) || all(xd0xd0 %% min(xd0xd0)==0)
+      expGSlev <- ifelse(YESORNO, TRUE, FALSE)
 
       if (useIndex==TRUE) {
 
           xd1 <- seq(n)
 
           ###
-          pab <- as.numeric(lm(xd1~log(xd))$coefficients)
+          if(expGSlev==TRUE) {
+          
+              if (!all(xd0xd0==xd0xd0[1]))  
+                  warning("Logged grain-size levels do not increase with equal steps!")
+          
+              ###
+              pab <- as.numeric(lm(xd1~log(xd))$coefficients)
+              
+          } else {
+          
+              xd2xd2 <- round(diff(as.numeric(xd)),2)
+              if (!all(xd2xd2==xd2xd2[1]))  
+                  warning("Grain-size levels do not increase with equal steps!")
+
+              ###
+              pab <- as.numeric(lm(xd1~xd)$coefficients)
+          
+          } # end if. 
 
       } else {
 
