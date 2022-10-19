@@ -5,7 +5,7 @@
   ###**************************************************************************************************************************
   ### Parametric end-member modelling using transformed probability density functions.
   ### Author: Jun Peng, Hunan University of Science and Technology, China. 
-  ### Last updated, 2022.10.16.
+  ### Last updated, 2022.10.18.
   ### 
   ### Note that the current version of the program is developed for parametric end-member modelling 
   ### of single-sample grain-size distributions measured using the Malvern Mastersizer-2000/3000
@@ -137,6 +137,11 @@
 
       ###
       xd <- as.numeric(GSDmat[1,])
+      
+      ### Check if the grain size levels are of log-scale.
+      xd0xd0 <- round(diff(log(as.numeric(xd))),2)
+      YESORNO <- all(xd0xd0==min(xd0xd0)) || all(xd0xd0 %% min(xd0xd0)==0)
+      expGSlev <- ifelse(YESORNO, TRUE, FALSE)
 
       ###
       if (useIndex==TRUE) {
