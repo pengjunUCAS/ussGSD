@@ -1902,8 +1902,17 @@
 
       ###
       if (useIndex==TRUE) {
+      
+          ###
+          if(expGSlev==TRUE) {
 
-          xm <- exp((pars[,1,drop=TRUE]-pab[1])/pab[2])
+              xm <- exp((pars[,1,drop=TRUE]-pab[1])/pab[2])
+              
+          } else {
+          
+              xm <- (pars[,1,drop=TRUE]-pab[1])/pab[2]
+          
+          } # end if.
 
       } else {
 
