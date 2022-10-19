@@ -1668,8 +1668,17 @@
 
       ###
       if (useIndex==TRUE) {
+      
+          ###
+          if(expGSlev==TRUE) {
 
-          mdgs <- pab[1] + pab[2]*log(mdgs)
+              mdgs <- pab[1] + pab[2]*log(mdgs)
+              
+          } else {
+          
+              mdgs <- pab[1] + pab[2]*mdgs
+          
+          } # end if.
 
       } # end if.
 
@@ -1886,10 +1895,10 @@
       } # end if.
 
       ###
-      rownames(pars) <- paste("EM.",1:ncomp,sep="")
-
-      ###
       pars <- pars[order(pars[,1]),,drop=FALSE]
+      
+      ###
+      rownames(pars) <- paste("EM.",1:ncomp,sep="")
 
       ###
       if (useIndex==TRUE) {
