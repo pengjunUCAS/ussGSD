@@ -649,8 +649,16 @@
 
       ###
       if (useIndex==TRUE) {
+      
+          if (expGSlev==TRUE) {
 
-          mdgs <- pab[1] + pab[2]*log(mdgs)
+              mdgs <- pab[1] + pab[2]*log(mdgs)
+              
+          } else {
+          
+              mdgs <- pab[1] + pab[2]*mdgs
+          
+          } # end if. 
 
       } # end if.
 
