@@ -5,7 +5,7 @@
   ###**************************************************************************************************************************
   ### Parametric end-member modelling using transformed probability density functions.
   ### Author: Jun Peng, Hunan University of Science and Technology, China. 
-  ### Last updated, 2022.10.18.
+  ### Last updated, 2022.10.19.
   ### 
   ### Note that the current version of the program is developed for parametric end-member modelling 
   ### of single-sample grain-size distributions measured using the Malvern Mastersizer-2000/3000
