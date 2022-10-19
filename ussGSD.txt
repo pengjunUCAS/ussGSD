@@ -3374,7 +3374,7 @@
         ###
         ### Check if the grain size levels are of log-scale.
         xd0xd0 <- round(diff(log(as.numeric(origin_xd))),2)
-        YESORNO <- all(xd0xd0==xd0xd0[1]) || all(xd0xd0 %% xd0xd0[1]==0)
+        YESORNO <- all(xd0xd0==min(xd0xd0)) || all(xd0xd0 %% min(xd0xd0)==0)
         expGSlev <- ifelse(YESORNO, TRUE, FALSE)
 
         ###
@@ -3387,11 +3387,20 @@
 
             ###
             if(expGSlev==TRUE) {
+            
+                if (!all(xd0xd0==xd0xd0[1]))  
+                    warning("Logged grain-size levels do not increase with equal steps!")
 
-                xd1 <- log(origin_xd)      
+                ###
+                xd1 <- log(origin_xd)  
 
             } else {
+            
+                xd2xd2 <- round(diff(as.numeric(origin_xd)),2)
+                if (!all(xd2xd2==xd2xd2[1]))  
+                    warning("Grain-size levels do not increase with equal steps!")
  
+                ###
                 xd1 <- origin_xd 
 
             } # end if.
