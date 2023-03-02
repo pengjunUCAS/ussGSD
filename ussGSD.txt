@@ -2106,7 +2106,7 @@
 
             } else {
             
-                xd2xd2 <- round(diff(as.numeric(origin_xd)),2)
+                xd2xd2 <- round(diff(as.numeric(origin_xd)),1)
                 if (!all(xd2xd2==xd2xd2[1]))  
                     warning("Grain-size levels do not increase with equal steps!")
  
@@ -3396,7 +3396,7 @@
 
             } else {
             
-                xd2xd2 <- round(diff(as.numeric(origin_xd)),2)
+                xd2xd2 <- round(diff(as.numeric(origin_xd)),1)
                 if (!all(xd2xd2==xd2xd2[1]))  
                     warning("Grain-size levels do not increase with equal steps!")
  
