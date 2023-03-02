@@ -1,11 +1,11 @@
 
   ###
   ###**************************************************************************************************************************
-  ### R program ussGSD (v2.1).
+  ### R program ussGSD (v2.2).
   ###**************************************************************************************************************************
   ### Methods and open source R code for efficient and flexible unmixing of single-sample grain-size distributions.
   ### Author: Jun Peng, Hunan University of Science and Technology, China. 
-  ### Last updated, 2022.10.19.
+  ### Last updated, 2023.03.02.
   ### 
   ### Note that the current version of the program is developed for unmixing of
   ### single-sample grain-size distributions measured using the Malvern Mastersizer-2000/3000
@@ -2083,7 +2083,7 @@
             stop("Error: argument [gsd] contains non-finite value!")
 
         ### Check if the grain size levels are of log-scale.
-        xd0xd0 <- round(diff(log(as.numeric(origin_xd))),2)
+        xd0xd0 <- round(diff(log(as.numeric(origin_xd))),1)
         YESORNO <- all(xd0xd0==min(xd0xd0)) || all(xd0xd0 %% min(xd0xd0)==0)
         expGSlev <- ifelse(YESORNO, TRUE, FALSE)
 
@@ -3373,7 +3373,7 @@
 
         ###
         ### Check if the grain size levels are of log-scale.
-        xd0xd0 <- round(diff(log(as.numeric(origin_xd))),2)
+        xd0xd0 <- round(diff(log(as.numeric(origin_xd))),1)
         YESORNO <- all(xd0xd0==min(xd0xd0)) || all(xd0xd0 %% min(xd0xd0)==0)
         expGSlev <- ifelse(YESORNO, TRUE, FALSE)
 
