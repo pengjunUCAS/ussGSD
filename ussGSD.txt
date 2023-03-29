@@ -444,7 +444,7 @@
           } # end for.
 
           ###
-          odrgXV <- order(rangeXV[,1])
+          odrgXV <- order(rowMeans(rangeXV))
           rangeXV <- rangeXV[odrgXV,,drop=FALSE]    
           sdXV <- sdXV[odrgXV]
           
@@ -533,8 +533,17 @@
               points(x=XV, y=YV, col=colvec[i], bg=colvec[i], pch=21, cex=1)
 
               ###
-              spreadXV <- seq(from=0.1*min(kDDD), to=max(kDDD)*1.9, 
-                              by=max(diff(sort(XV)))/10)
+              if (length(XV)>=2) {
+
+                  spreadXV <- seq(from=0.1*min(kDDD), to=max(kDDD)*1.9, 
+                                  by=max(diff(sort(XV)))/10)
+
+              } else {
+
+                  spreadXV <- seq(from=0.1*min(kDDD), to=max(kDDD)*1.9, 
+                                  by=XV/10)
+
+              } # end if.
 
               ###
               normPDF <- dnorm(x=log(spreadXV), mean=mean(log(XV)), 
@@ -606,7 +615,7 @@
       } # end for.
 
       ###
-      odrgXV <- order(rangeXV[,1])
+      odrgXV <- order(rowMeans(rangeXV))
       rangeXV <- rangeXV[odrgXV,,drop=FALSE]    
       sdXV <- sdXV[odrgXV]
       
@@ -778,7 +787,17 @@
                  code=3, lwd=2, angle=90, length=0.05, col=colvec[i])
              
           ###
-          spreadXV <- seq(from=0.1*min(meanGZ), to=max(meanGZ)*1.9, by=max(diff(sort(XV)))/10)
+          if (nXV>=2) {
+
+              spreadXV <- seq(from=0.1*min(meanGZ), to=max(meanGZ)*1.9, 
+                              by=max(diff(sort(XV)))/10)
+
+          } else {
+
+              spreadXV <- seq(from=0.1*min(meanGZ), to=max(meanGZ)*1.9, 
+                              by=XV/10)
+
+          } # end if.
 
           ###      
           pdfMat <- matrix(nrow=length(spreadXV), ncol=nXV)
