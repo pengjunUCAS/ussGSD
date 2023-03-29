@@ -5,7 +5,7 @@
   ###**************************************************************************************************************************
   ### Methods and open source R code for efficient and flexible unmixing of single-sample grain-size distributions.
   ### Author: Jun Peng, Hunan University of Science and Technology, China. 
-  ### Last updated, 2023.03.02.
+  ### Last updated, 2023.03.29.
   ### 
   ### Note that the current version of the program is developed for unmixing of
   ### single-sample grain-size distributions measured using the Malvern Mastersizer-2000/3000
@@ -186,7 +186,7 @@
           ###
           for (i in 2:9) {
 
-              ithKM <- stats::kmeans(log(modeGZ), centers=i, nstart=1000)
+              ithKM <- stats::kmeans(log(modeGZ), centers=i, nstart=200)
 
               ###
               matKM[i-1,1] <- ithKM$tot.withinss 
@@ -432,16 +432,22 @@
 
           ###
           rangeXV <- matrix(nrow=13, ncol=2)
+          sdXV <- vector(length=13)
+
+          ###
           for (i in 1:nkm) {
 
-              rangeXV[i,] <- round(range(kDDD[KM$cluster==i]),1)
+              rangeXV[i,] <- round(range(kDDD[KM$cluster==i]),2)
+
+              sdXV[i] <- round(sd(kDDD[KM$cluster==i]),2)
 
           } # end for.
 
           ###
           odrgXV <- order(rangeXV[,1])
           rangeXV <- rangeXV[odrgXV,,drop=FALSE]    
-
+          sdXV <- sdXV[odrgXV]
+          
           ###
           ###-------------------------------------------------------------------------------------
           par(mfrow=c(1,1))
@@ -454,32 +460,32 @@
 
           ###
           mylegend <- c("Algorithm: K-Means clustering", "",
-                        paste("Centre of cluster 1 :  ", kmCST[1], 
-                              " (", rangeXV[1,1]," - ",rangeXV[1,2],")",sep=""),
-                        paste("Centre of cluster 2 :  ", kmCST[2], 
-                              " (", rangeXV[2,1]," - ",rangeXV[2,2],")",sep=""),
-                        paste("Centre of cluster 3 :  ", kmCST[3], 
-                              " (", rangeXV[3,1]," - ",rangeXV[3,2],")",sep=""),
-                        paste("Centre of cluster 4 :  ", kmCST[4], 
-                              " (", rangeXV[4,1]," - ",rangeXV[4,2],")",sep=""),
-                        paste("Centre of cluster 5 :  ", kmCST[5], 
-                              " (", rangeXV[5,1]," - ",rangeXV[5,2],")",sep=""),
-                        paste("Centre of cluster 6 :  ", kmCST[6], 
-                              " (", rangeXV[6,1]," - ",rangeXV[6,2],")",sep=""),
-                        paste("Centre of cluster 7 :  ", kmCST[7], 
-                              " (", rangeXV[7,1]," - ",rangeXV[7,2],")",sep=""),
-                        paste("Centre of cluster 8 :  ", kmCST[8], 
-                              " (", rangeXV[8,1]," - ",rangeXV[8,2],")",sep=""),
-                        paste("Centre of cluster 9 :  ", kmCST[9], 
-                              " (", rangeXV[9,1]," - ",rangeXV[9,2],")",sep=""),
-                        paste("Centre of cluster 10:  ", kmCST[10], 
-                              " (", rangeXV[10,1]," - ",rangeXV[10,2],")",sep=""),
-                        paste("Centre of cluster 11:  ", kmCST[11], 
-                          "  (", rangeXV[11,1]," - ",rangeXV[11,2],")",sep=""),
-                        paste("Centre of cluster 12:  ", kmCST[12], 
-                              " (", rangeXV[12,1]," - ",rangeXV[12,2],")",sep=""),
-                        paste("Centre of cluster 13:  ", kmCST[13], 
-                              " (", rangeXV[13,1]," - ",rangeXV[13,2],")",sep=""))
+                        paste("Centre of cluster 1:  ", kmCST[1],"+-",sdXV[1], 
+                              " (", rangeXV[1,1],"-",rangeXV[1,2],")",sep=""),
+                        paste("Centre of cluster 2:  ", kmCST[2],"+-",sdXV[2],
+                              " (", rangeXV[2,1],"-",rangeXV[2,2],")",sep=""),
+                        paste("Centre of cluster 3:  ", kmCST[3],"+-",sdXV[3], 
+                              " (", rangeXV[3,1],"-",rangeXV[3,2],")",sep=""),
+                        paste("Centre of cluster 4:  ", kmCST[4],"+-",sdXV[4], 
+                              " (", rangeXV[4,1],"-",rangeXV[4,2],")",sep=""),
+                        paste("Centre of cluster 5:  ", kmCST[5],"+-",sdXV[5], 
+                              " (", rangeXV[5,1],"-",rangeXV[5,2],")",sep=""),
+                        paste("Centre of cluster 6:  ", kmCST[6],"+-",sdXV[6], 
+                              " (", rangeXV[6,1],"-",rangeXV[6,2],")",sep=""),
+                        paste("Centre of cluster 7:  ", kmCST[7],"+-",sdXV[7], 
+                              " (", rangeXV[7,1],"-",rangeXV[7,2],")",sep=""),
+                        paste("Centre of cluster 8:  ", kmCST[8],"+-",sdXV[8], 
+                              " (", rangeXV[8,1],"-",rangeXV[8,2],")",sep=""),
+                        paste("Centre of cluster 9:  ", kmCST[9],"+-",sdXV[9], 
+                              " (", rangeXV[9,1],"-",rangeXV[9,2],")",sep=""),
+                        paste("Centre of cluster 10:  ", kmCST[10],"+-",sdXV[10], 
+                              " (", rangeXV[10,1],"-",rangeXV[10,2],")",sep=""),
+                        paste("Centre of cluster 11:  ", kmCST[11],"+-",sdXV[11], 
+                          "  (", rangeXV[11,1],"-",rangeXV[11,2],")",sep=""),
+                        paste("Centre of cluster 12:  ", kmCST[12],"+-",sdXV[12], 
+                              " (", rangeXV[12,1],"-",rangeXV[12,2],")",sep=""),
+                        paste("Centre of cluster 13:  ", kmCST[13],"+-",sdXV[13], 
+                              " (", rangeXV[13,1],"-",rangeXV[13,2],")",sep=""))
 
           ###
           legend("top",legend=mylegend[1:(nkm+2)], bty="n", cex=1.25)
@@ -574,24 +580,36 @@
 
       ###
       cluster_fmm <- apply(fmmMAT, MARGIN=1, which.max)
+      ###
+      if (!all((1:nfm) %in% cluster_fmm)) {
+
+          dev.off()
+
+          stop("Error: Application of FMM clustering failed!")
+
+      } # end if.
 
       ###
       kmCST <- round(FMM$pars[,3],1)
 
       ###
       rangeXV <- matrix(nrow=13, ncol=2)
-
+      sdXV <- vector(length=13)
+      
       ###
       for (i in 1:nfm) {
 
-          rangeXV[i,] <- round(range(meanGZ[cluster_fmm==i]),1)
+          rangeXV[i,] <- round(range(meanGZ[cluster_fmm==i]),2)
+ 
+          sdXV[i] <- round(sd(meanGZ[cluster_fmm==i]),2) 
 
       } # end for.
 
       ###
       odrgXV <- order(rangeXV[,1])
       rangeXV <- rangeXV[odrgXV,,drop=FALSE]    
-
+      sdXV <- sdXV[odrgXV]
+      
       ###
       ###---------------------------------------------------------------------------------
       par(mfrow=c(1,1))
@@ -603,32 +621,32 @@
       mylegend <- c("Algorithm: Bayesian clustering (Finite mixture model)", "",
                     paste("The maximum logged likelihood value: ", round(FMM$maxlik,1),sep=""),
                     paste("The Bayesian Information Criteria value: ", round(FMM$bic,1),sep=""),"",
-                    paste("Centre of cluster 1 :  ", kmCST[1], 
-                          " (", rangeXV[1,1]," - ",rangeXV[1,2],")",sep=""),
-                    paste("Centre of cluster 2 :  ", kmCST[2], 
-                          " (", rangeXV[2,1]," - ",rangeXV[2,2],")",sep=""),
-                    paste("Centre of cluster 3 :  ", kmCST[3], 
-                          " (", rangeXV[3,1]," - ",rangeXV[3,2],")",sep=""),
-                    paste("Centre of cluster 4 :  ", kmCST[4], 
-                          " (", rangeXV[4,1]," - ",rangeXV[4,2],")",sep=""),
-                    paste("Centre of cluster 5 :  ", kmCST[5], 
-                          " (", rangeXV[5,1]," - ",rangeXV[5,2],")",sep=""),
-                    paste("Centre of cluster 6 :  ", kmCST[6], 
-                          " (", rangeXV[6,1]," - ",rangeXV[6,2],")",sep=""),
-                    paste("Centre of cluster 7 :  ", kmCST[7], 
-                          " (", rangeXV[7,1]," - ",rangeXV[7,2],")",sep=""),
-                    paste("Centre of cluster 8 :  ", kmCST[8], 
-                          " (", rangeXV[8,1]," - ",rangeXV[8,2],")",sep=""),
-                    paste("Centre of cluster 9 :  ", kmCST[9], 
-                          " (", rangeXV[9,1]," - ",rangeXV[9,2],")",sep=""),
-                    paste("Centre of cluster 10:  ", kmCST[10], 
-                          " (", rangeXV[10,1]," - ",rangeXV[10,2],")",sep=""),
-                    paste("Centre of cluster 11:  ", kmCST[11], 
-                      "  (", rangeXV[11,1]," - ",rangeXV[11,2],")",sep=""),
-                    paste("Centre of cluster 12:  ", kmCST[12], 
-                          " (", rangeXV[12,1]," - ",rangeXV[12,2],")",sep=""),
-                    paste("Centre of cluster 13:  ", kmCST[13], 
-                          " (", rangeXV[13,1]," - ",rangeXV[13,2],")",sep=""))
+                    paste("Centre of cluster 1:  ", kmCST[1],"+-",sdXV[1], 
+                          " (", rangeXV[1,1],"-",rangeXV[1,2],")",sep=""),
+                    paste("Centre of cluster 2:  ", kmCST[2],"+-",sdXV[2],
+                          " (", rangeXV[2,1],"-",rangeXV[2,2],")",sep=""),
+                    paste("Centre of cluster 3:  ", kmCST[3],"+-",sdXV[3], 
+                          " (", rangeXV[3,1],"-",rangeXV[3,2],")",sep=""),
+                    paste("Centre of cluster 4:  ", kmCST[4],"+-",sdXV[4], 
+                          " (", rangeXV[4,1],"-",rangeXV[4,2],")",sep=""),
+                    paste("Centre of cluster 5:  ", kmCST[5],"+-",sdXV[5], 
+                          " (", rangeXV[5,1],"-",rangeXV[5,2],")",sep=""),
+                    paste("Centre of cluster 6:  ", kmCST[6],"+-",sdXV[6], 
+                          " (", rangeXV[6,1],"-",rangeXV[6,2],")",sep=""),
+                    paste("Centre of cluster 7:  ", kmCST[7],"+-",sdXV[7], 
+                          " (", rangeXV[7,1],"-",rangeXV[7,2],")",sep=""),
+                    paste("Centre of cluster 8:  ", kmCST[8],"+-",sdXV[8], 
+                          " (", rangeXV[8,1],"-",rangeXV[8,2],")",sep=""),
+                    paste("Centre of cluster 9:  ", kmCST[9],"+-",sdXV[9], 
+                          " (", rangeXV[9,1],"-",rangeXV[9,2],")",sep=""),
+                    paste("Centre of cluster 10:  ", kmCST[10],"+-",sdXV[10], 
+                          " (", rangeXV[10,1],"-",rangeXV[10,2],")",sep=""),
+                    paste("Centre of cluster 11:  ", kmCST[11],"+-",sdXV[11], 
+                      "  (", rangeXV[11,1],"-",rangeXV[11,2],")",sep=""),
+                    paste("Centre of cluster 12:  ", kmCST[12],"+-",sdXV[12], 
+                          " (", rangeXV[12,1],"-",rangeXV[12,2],")",sep=""),
+                    paste("Centre of cluster 13:  ", kmCST[13],"+-",sdXV[13], 
+                          " (", rangeXV[13,1],"-",rangeXV[13,2],")",sep=""))
 
       ###
       legend("top",legend=mylegend[1:(nfm+5)], bty="n", cex=1.25)
@@ -916,7 +934,7 @@
   ###               using a recursive optimization protocol.
   ###
   ###         mrsl: A numeric value indicating the minimum resolution between two adjacent     
-  ###               components used to trim the unmixing results, which ranges from 0.1 to 1.
+  ###               components used to trim the unmixing results, which ranges from 0.1 to 2.
   ###
   ###       rmZero: A logical value indicating whether zero volume percentages will be removed.
   ###
@@ -1384,7 +1402,7 @@
   ###            using a recursive optimization protocol.
   ###
   ###      mrsl: A numeric value indicating the minimum resolution between two adjacent     
-  ###            components used to trim the unmixing results, which ranges from 0.1 to 1.
+  ###            components used to trim the unmixing results, which ranges from 0.1 to 2.
   ###
   ###    rmZero: A logical value indicating whether removing zeros from the volume percentages.
   ### 
@@ -1944,7 +1962,7 @@
   ###              using a recursive optimization protocol.
   ###
   ###        mrsl: A numeric value indicating the minimum resolution between two adjacent     
-  ###              components used to trim the unmixing results, which ranges from 0.1 to 1. 
+  ###              components used to trim the unmixing results, which ranges from 0.1 to 2. 
   ###
   ###viewAutoInis: A logical value indicating whether the automatically generated initial modal 
   ###              sizes will be visualized before the unmixing process if auto=TRUE.
@@ -2058,7 +2076,7 @@
                   is.logical(useIndex), length(useIndex)==1,
                   is.character(minfunc), length(minfunc)==1, minfunc %in% c("fom", "rss"),
                   is.logical(trim), length(trim)==1,
-                  is.numeric(mrsl), length(mrsl)==1, mrsl>0.1, mrsl<1, 
+                  is.numeric(mrsl), length(mrsl)==1, mrsl>0.1, mrsl<2, 
                   is.logical(viewAutoInis), length(viewAutoInis)==1, 
                   is.logical(viewLM), length(viewLM)==1, 
                   is.logical(viewFit), length(viewFit)==1,
@@ -2532,7 +2550,7 @@
              coef <- try(solve(a=t(mat)%*%mat, b=t(mat)%*%as.matrix(yd)), silent=TRUE)
 
              ###
-             if (class(coef)=="try-error" || any(!is.finite(coef)) || any(coef<0)) return(hg) 
+             if (any(class(coef)=="try-error") || any(!is.finite(coef)) || any(coef<0)) return(hg) 
  
              ###
              coef <- as.numeric(coef)
@@ -2771,7 +2789,7 @@
                ### Accept the unmixing results of the "trial-and-error" protocol 
                ### if the following conditions are satisfied.
                ###------------------------------------------------------------------
-               OOKK <- class(coef0)!="try-error" && 
+               OOKK <- all(class(coef0)!="try-error") && 
                        all(is.finite(coef0)) && all(coef0>0) && 
                        all(is.finite(beta0)) && all(is.finite(theta0)) && 
                        all(is.finite(Mean0))  && all(Mean0>MINX & Mean0<MAXX) &&
@@ -3224,7 +3242,7 @@
   ###              using a recursive optimization protocol.
   ###
   ###        mrsl: A numeric value indicating the minimum resolution between two adjacent     
-  ###              components used to trim the unmixing results, which ranges from 0.1 to 1. 
+  ###              components used to trim the unmixing results, which ranges from 0.1 to 2. 
   ###
   ###viewAutoInis: A logical value indicating whether the automatically generated initial modal 
   ###              sizes will be visualized before the unmixing process if auto=TRUE.
@@ -3341,7 +3359,7 @@
                   is.logical(useIndex), length(useIndex)==1,
                   is.character(minfunc), length(minfunc)==1, minfunc %in% c("fom", "rss"),
                   is.logical(trim), length(trim)==1,
-                  is.numeric(mrsl), length(mrsl)==1, mrsl>0.1, mrsl<1, 
+                  is.numeric(mrsl), length(mrsl)==1, mrsl>0.1, mrsl<2, 
                   is.logical(viewAutoInis), length(viewAutoInis)==1, 
                   is.logical(viewLM), length(viewLM)==1, 
                   is.logical(viewFit), length(viewFit)==1,
@@ -4962,7 +4980,7 @@
   ###               using a recursive optimization protocol.
   ###
   ###         mrsl: A numeric value indicating the minimum resolution between two adjacent     
-  ###               components used to trim the unmixing results, which ranges from 0.1 to 1.
+  ###               components used to trim the unmixing results, which ranges from 0.1 to 2.
   ###
   ###          ncr: The number of cores to be used during the parallel unmixing process. If
   ###               the total number of available cores (NumberOfCluster) is smaller than ncr, 
@@ -5293,7 +5311,7 @@
   ###            using a recursive optimisation protocol.
   ###
   ###      mrsl: A numeric value indicating the minimum resolution between two adjacent     
-  ###            components used to trim the unmixing results, which ranges from 0.1 to 1.
+  ###            components used to trim the unmixing results, which ranges from 0.1 to 2.
   ###
   ###       ncr: The number of cores to be used during the parallel unmixing process. If
   ###            the total number of available cores (NumberOfCluster) is smaller than ncr, 
