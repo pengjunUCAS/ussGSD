@@ -5,7 +5,7 @@
   ###**************************************************************************************************************************
   ### Methods and open source R code for efficient and flexible unmixing of single-sample grain-size distributions.
   ### Author: Jun Peng, Hunan University of Science and Technology, China. 
-  ### Last updated, 2023.12.18.
+  ### Last updated, 2023.12.20.
   ### 
   ### Note that the current version of the program is developed for unmixing of
   ### single-sample grain-size distributions measured using the Malvern Mastersizer-2000/3000
@@ -80,11 +80,11 @@
   ###     preclude: A vector consisting of integers representing the indexes of samples 
   ###               which will not participate the analysis. 
   ###
-  ###          nkm: An integer indicating the number of clusters to be generated (from 2 to 13)
+  ###          nkm: An integer indicating the number of clusters to be generated (from 1 to 9)
   ###               during the application of the k-means clustering algorithm in analyzing 
   ###               the unmixed grain-size mode and median.
   ###
-  ###          nfm: An integer indicating the number of clusters to be generated (from 2 to 13)
+  ###          nfm: An integer indicating the number of clusters to be generated (from 1 to 9)
   ###               during the application of the Bayesian clustering algorithm based on the 
   ###               variance-accounted finite mixture model in analysing the unmixed mean grain 
   ###               sizes of individual components.
@@ -124,8 +124,8 @@
 
       stopifnot(is.null(preclude) || is.numeric(preclude),
                 is.numeric(sf), length(sf)==1L, sf>0, sf<2, 
-                is.null(nkm) || (is.numeric(nkm) && length(nkm)==1 && nkm %in% (2:13)),
-                is.null(nfm) || (is.numeric(nfm) && length(nfm)==1 && nfm %in% (2:13)),
+                is.null(nkm) || (is.numeric(nkm) && length(nkm)==1 && nkm %in% (1:9)),
+                is.null(nfm) || (is.numeric(nfm) && length(nfm)==1 && nfm %in% (1:9)),
                 length(addsigma)==1, is.numeric(addsigma), addsigma>=0,
                 length(logx)==1, is.logical(logx), is.null(mps) || (is.numeric(mps) && length(mps)==1),
                 is.null(outfile) || (length(outfile)==1 && is.character(outfile)))
@@ -209,16 +209,16 @@
       on.exit(par(oldpar))
 
       ###
-      matKM <- matrix(nrow=8, ncol=2)
+      matKM <- matrix(nrow=9, ncol=2)
 
       ###
-      for (i in 2:9) {
+      for (i in 1:9) {
 
           ithKM <- stats::kmeans(log(modeGZ), centers=i, nstart=200)
-
+   
           ###
-          matKM[i-1,1] <- ithKM$tot.withinss 
-          matKM[i-1,2] <- ithKM$betweenss
+          matKM[i,1] <- ithKM$tot.withinss 
+          matKM[i,2] <- ithKM$betweenss
 
       } # end for.
 
@@ -226,7 +226,7 @@
       par("mar"=c(5.1,4.1,4.1,4.1))
 
       ###
-      plot(2:9, matKM[,1], type="o", yaxt="n", col="skyblue", cex=3, lwd=2, xlab="Number of KM clusters [nkm]", 
+      plot(1:9, matKM[,1], type="o", yaxt="n", col="skyblue", cex=3, lwd=2, xlab="Number of KM clusters [nkm]", 
            ylab="Total within-cluster sum of squares (TWSS)", cex.lab=1.2, main="Variation of K-Means statistics with [nkm]", cex.main=1.5)
 
       ###
@@ -236,7 +236,7 @@
       par("new"=TRUE)
           
       ###
-      plot(2:9, matKM[,2], type="o", xaxt="n", yaxt="n", col="red", xlab="", ylab="", cex=3, lwd=2)
+      plot(1:9, matKM[,2], type="o", xaxt="n", yaxt="n", col="red", xlab="", ylab="", cex=3, lwd=2)
 
       ###
       axis(side=4, col="red",col.ticks="red",lwd=3)
@@ -265,11 +265,66 @@
       sdGZ0 <- sdGZ
       toosmallidx <- sdGZ/meanGZ<threshold
       if (length(toosmallidx)>0L)  sdGZ0[toosmallidx] <- meanGZ[toosmallidx]*threshold
+     
+      ###
+      ### Optimize the common age model, function 1.
+      ###-----------------------------------------------------------
+      comED <- function(ed, sed, addsigma, iflog) {
+
+          if (iflog==TRUE) {
+
+              sigma2 <- (sed/ed)^2+addsigma^2
+              d <- log(ed)
+
+          } else {
+
+              sigma2 <- sed^2+addsigma^2
+              d <- ed
+
+          } # end if.
+
+          ###
+          w <- 1.0/sigma2
+          v1 <- sum(w*d)/sum(w)
+
+          ###
+          maxlik <- sum(log(1.0/sqrt(2.0*pi)/sqrt(sigma2)*exp(-(v1-d)^2/2.0/sigma2)))
+          bic <- -2.0*maxlik + log(length(ed))
+
+          ###
+          if (iflog==TRUE) {
+
+              pars <- matrix(c(1,exp(v1)), nrow=1)
+
+          } else {
+
+              pars <- matrix(c(1,v1), nrow=1)
+
+          } # end if.
+
+          ###
+          rownames(pars) <- "Comp1"
+          colnames(pars) <- c("Prop", "Mu")
+            
+          ###
+          output <- list("pars"=pars, "bic"=bic, "maxlik"=maxlik)
+          return(output)
+
+      } # end funciton comED.
+      ###
 
       ###
-      ### Optimize the finite mixture age model, function 1.
+      ### Optimize the finite mixture age model, function 2.
       ###-----------------------------------------------------------------
       fmmED <- function(ed, sed, ncomp, addsigma=0, iflog=TRUE) {
+
+          ###
+          if (ncomp==1)    {
+
+              output <- comED(ed=ed, sed=sed, addsigma=addsigma, iflog=iflog)
+              return(output)
+
+           } # end if.
 
           ###
           if (iflog==TRUE) {
@@ -372,22 +427,22 @@
       } # end function fmmED. 
 
       ###
-      ### Optimize the finite mixture age model, function 2.
+      ### Optimize the finite mixture age model, function 3.
       ###-----------------------------------------------------------------
       optFMM <- function(ed, sed, ncomp, maxcomp=9, addsigma=0, iflog=TRUE) {
 
           if (ncomp==0) {
 
               minval <- 1.0e20
-              LIST <- vector(length=maxcomp-1, mode="list")
+              LIST <- vector(length=maxcomp, mode="list")
  
               ###
-              for (i in 2:maxcomp) {
+              for (i in 1:maxcomp) {
 
                   SAM <- try(fmmED(ed=ed, sed=sed, ncomp=i, addsigma=addsigma, iflog=iflog), silent=TRUE)
                     
                   ###
-                  if (inherits(SAM,what="try-error")==FALSE)  LIST[[i-1]] <- SAM
+                  if (inherits(SAM,what="try-error")==FALSE)  LIST[[i]] <- SAM
 
               } # end for.
                        
@@ -423,7 +478,8 @@
 
           } else {
 
-              fmmED(ed=ed, sed=sed, ncomp=ncomp, addsigma=addsigma, iflog=iflog)
+              output <- fmmED(ed=ed, sed=sed, ncomp=ncomp, addsigma=addsigma, iflog=iflog)
+              return(output)
 
           } # end if.
 
@@ -893,8 +949,8 @@
       } # end if. 
 
       ###
-      zmin <- min(meanGZ)*0.9 
-      zmax <- max(meanGZ)*1.1
+      zmin <- min(meanGZ)*ifelse(nfm>1,0.9,0.3)
+      zmax <- max(meanGZ)*ifelse(nfm>1,1.1,1.7)
    
       ###
       miny <- (log(zmin)-centralGZ)*maxPrecision
@@ -998,13 +1054,6 @@
 
           ###
           arrows(x0=XV-seXV/2, y0=YV, x1=XV+seXV/2, y1=YV, code=3, lwd=2, angle=90, length=0.05, col=colvec[i])
-             
-          ###
-          ###if (nXV>=2) {
-              ###spreadXV <- seq(from=0.1*min(meanGZ), to=max(meanGZ)*1.9, by=max(diff(sort(XV)))/50)
-          ###} else {
-              ###spreadXV <- seq(from=0.1*min(meanGZ), to=max(meanGZ)*1.9, by=XV/50)
-          ###} # end if.
 
           ###      
           pdfMat <- matrix(nrow=length(spreadXV), ncol=nXV)
