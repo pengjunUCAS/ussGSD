@@ -5,7 +5,7 @@
   ###**************************************************************************************************************************
   ### Methods and open source R code for efficient and flexible unmixing of single-sample grain-size distributions.
   ### Author: Jun Peng, Hunan University of Science and Technology, China. 
-  ### Last updated, 2023.12.20.
+  ### Last updated, 2023.12.24.
   ### 
   ### Note that the current version of the program is developed for unmixing of
   ### single-sample grain-size distributions measured using the Malvern Mastersizer-2000/3000
@@ -93,6 +93,10 @@
   ###               in quadratic to the relative standard error of mean grain sizes of individual 
   ###               components before the implementation of the Bayesian clustering algorithm.
   ###
+  ###     usePrior: A logical value indicating whether the prior information on the proportion of data points
+  ###               belonging to each group optimized with the finite mixture model be used during the 
+  ###               classification of data points using the Bayesian clustering algorithm.
+  ###
   ###         logx: A logical value indicating whether the grain-size levels will be ploted in a logged scale.
   ###
   ###          mps: A real number indicating the upper limit for the precision of data points visualized in the radial plot.  
@@ -111,23 +115,25 @@
   ###        and (7) RSE-residual standard error.
   ###
   ###  pgsp: A matrix showing the pooled grain-size parameters and associated clustering results, 
-  ###        with column names of (1) NO-sample number, (2) Median-component median, 
-  ###        (3) MedianKM-KM cluster the median belongs to, (4) Mode-component mode,
-  ###        (5) ModeKM-KM cluster the mode belongs to, (6) Mean-component mean,
-  ###        (7) Sd-component standard deviation, (8) MeanFMM-FMM cluster the mean belongs to, 
-  ###        and (9) Abundance-component abundance. 
+  ###        with column names of (1) NO-sample number, (2) Proportion-component proportion, (3) Mean-component mean, 
+  ###        (4) Median-component median, (5) Mode-component mode, (6) Sd-component standard deviation,   
+  ###        (7) MeanFMM-FMM cluster the mean belongs to, (8) MedianKM-KM cluster the median belongs to, 
+  ###        and (9) ModeKM-KM cluster the mode belongs to.       
   ###
   ### Note that if obj_batchgsd=NULL, the user needs to ensure that the function load_ussGSDbatch() has been called
   ### to import a RData file from the current working directory which contains an object of S3 class "batchgsd".
   ###==========================================================================================================================
-  summary_ussGSDbatch <- function(obj_batchgsd=NULL, preclude=NULL, sf=1, nkm=NULL, nfm=NULL, addsigma=0, logx=TRUE, mps=NULL, outfile=NULL) {
+  summary_ussGSDbatch <- function(obj_batchgsd=NULL, preclude=NULL, sf=1, nkm=NULL, nfm=NULL, addsigma=0, 
+                                  usePrior=FALSE, logx=TRUE, mps=NULL, outfile=NULL) {
 
       stopifnot(is.null(preclude) || is.numeric(preclude),
                 is.numeric(sf), length(sf)==1L, sf>0, sf<2, 
                 is.null(nkm) || (is.numeric(nkm) && length(nkm)==1 && nkm %in% (1:9)),
                 is.null(nfm) || (is.numeric(nfm) && length(nfm)==1 && nfm %in% (1:9)),
                 length(addsigma)==1, is.numeric(addsigma), addsigma>=0,
-                length(logx)==1, is.logical(logx), is.null(mps) || (is.numeric(mps) && length(mps)==1),
+                length(usePrior)==1, is.logical(usePrior),
+                length(logx)==1, is.logical(logx), 
+                is.null(mps) || (is.numeric(mps) && length(mps)==1),
                 is.null(outfile) || (length(outfile)==1 && is.character(outfile)))
 
       ###
@@ -351,6 +357,7 @@
 
           ###
           info <- 1
+          maxiter <- 0
           for (kk in 1:6) {
 
               inip <- rep(1.0/ncomp, ncomp)
@@ -362,7 +369,7 @@
                   for (j in 1:ncomp)  pf[,j] <- inip[j]*sqrt(w)*exp(-0.5*w*(ed-inimu[j])^2)
 
                   ###
-                  if (any(!is.finite(pf)))  stop("Optimization of FMM failed!")
+                  if (any(!is.finite(pf)))  stop(paste("Optimization of FMM with nfm=",ncomp," failed!",sep=""))
 
                   ###
                   pp <- pf/rowSums(pf)
@@ -372,13 +379,16 @@
                   ###
                   p1 <- colSums(pp)/ndat
                   mu1 <- colSums(pv)/colSums(wp)
+                  if (any(!is.finite(p1)) || any(!is.finite(mu1)))  stop(paste("Optimization of FMM with nfm=",ncomp," failed!",sep=""))
 
                   ###
                   if (sum(abs(inip-p1))+sum(abs(inimu-mu1))<=1.0e-8)  break
+                  if (maxiter>5000L)  break
 
                   ###
                   inip <- p1
                   inimu <- mu1
+                  maxiter <- maxiter+1L
 
               } # end repeat.
 
@@ -403,7 +413,7 @@
           } # end for.
 
           ###
-          if (info==1)  stop("Optimization of FMM failed!")
+          if (info==1)  stop(paste("Optimization of FMM with nfm=",ncomp," failed!",sep=""))
             
           ###
           p <- cp
@@ -442,7 +452,15 @@
                   SAM <- try(fmmED(ed=ed, sed=sed, ncomp=i, addsigma=addsigma, iflog=iflog), silent=TRUE)
                     
                   ###
-                  if (inherits(SAM,what="try-error")==FALSE)  LIST[[i]] <- SAM
+                  if (inherits(SAM,what="try-error")==FALSE)  { 
+
+                      LIST[[i]] <- SAM
+
+                  } else {
+
+                      print(attr(SAM, "condition"))
+
+                  } # end if.
 
               } # end for.
                        
@@ -472,7 +490,7 @@
  
               } else {
 
-                  stop("Optimization of FMM failed!")
+                  stop("Selection of the best FMM model failed!")
 
               } # end if. 
 
@@ -486,7 +504,6 @@
       } # end function optFMM.
       
       ###
-      ###FMM <- numOSL::RadialPlotter(cbind(meanGZ,sdGZ0),ncomp=nfm, maxcomp=13, plot=FALSE, addsigma=addsigma)
       FMM <- optFMM(ed=meanGZ, sed=sdGZ0, ncomp=nfm, maxcomp=9, addsigma=addsigma)
 
       ###
@@ -840,11 +857,19 @@
       ###
       for (i in 1:nfm) {
 
-          p_fmm <- FMM$pars[i,1]
           mu_fmm <- log(FMM$pars[i,2])
 
           ###
-          fmmMAT[,i] <- p_fmm/sqrt(2*pi)/seyv_fmm*exp(-0.5*(yv_fmm-mu_fmm)^2/seyv_fmm^2)
+          if (usePrior==TRUE) {
+
+              p_fmm <- FMM$pars[i,1]
+              fmmMAT[,i] <- p_fmm/sqrt(2*pi)/seyv_fmm*exp(-0.5*(yv_fmm-mu_fmm)^2/seyv_fmm^2)
+
+          } else {
+
+              fmmMAT[,i] <- 1.0/sqrt(2*pi)/seyv_fmm*exp(-0.5*(yv_fmm-mu_fmm)^2/seyv_fmm^2)
+
+          } # end if.
 
       } # end for.
 
